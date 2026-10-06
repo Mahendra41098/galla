@@ -1,0 +1,1341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#8e1f34">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Galla">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Galla Cash Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+
+/* Layout: a counter ledger — sticky shop bar, period filter, grouped summary, four tabs */
+:root{
+  --bg:#f4f5f2; --paper:#ffffff; --ink:#1b2220; --muted:#5f6b67; --line:#dfe3df; --soft:#eceeea;
+  --accent:#8e1f34; --accent-ink:#ffffff; --accent-soft:#f6e6e9;
+  --good:#1e7a4c; --good-soft:#e3f2ea; --warn:#a2560c; --warn-soft:#fbeedd; --bad:#b4232c;
+  --display:"Familjen Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121615; --paper:#1a201e; --ink:#e7ece9; --muted:#9aa6a1; --line:#2c3532; --soft:#222a27;
+  --accent:#e2768a; --accent-ink:#1a0d10; --accent-soft:#3a1d24;
+  --good:#5fcf95; --good-soft:#163024; --warn:#f0a85a; --warn-soft:#3a2a17; --bad:#ff7b82; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121615; --paper:#1a201e; --ink:#e7ece9; --muted:#9aa6a1; --line:#2c3532; --soft:#222a27;
+  --accent:#e2768a; --accent-ink:#1a0d10; --accent-soft:#3a1d24;
+  --good:#5fcf95; --good-soft:#163024; --warn:#f0a85a; --warn-soft:#3a2a17; --bad:#ff7b82; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:0 56px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=date],input[type=number],input[type=text],input[type=search]{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
+
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-16px;padding:10px 16px}
+.bar-in{max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.brand h1{font-size:21px;letter-spacing:-.01em}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;max-width:100%}
+nav.tabs button{border:0;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-radius:6px;white-space:nowrap;font-weight:500}
+nav.tabs button[aria-selected=true]{background:var(--ink);color:var(--bg)}
+
+.filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.quick{display:flex;flex-wrap:wrap;gap:6px}
+.quick button{border:1px solid var(--line);background:var(--paper);border-radius:99px;padding:5px 12px;cursor:pointer;font-size:13px}
+.quick button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.stepper{display:flex;align-items:center;gap:6px;margin-left:auto}
+.iconbtn{border:1px solid var(--line);background:var(--paper);border-radius:6px;width:34px;height:34px;cursor:pointer;flex:none}
+.plabel{font-family:var(--display);font-weight:600;font-size:17px;text-align:center;min-width:10ch}
+.custom{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+
+.status{font-size:13px;color:var(--muted);padding-top:10px}
+.status.err{color:var(--bad)}
+
+.summary{display:grid;gap:10px;margin-top:14px}
+.group{display:grid;grid-template-columns:96px repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.glabel{background:var(--soft);padding:12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;align-items:center}
+.tile{background:var(--paper);padding:10px 14px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;font-weight:500;overflow-wrap:anywhere}
+.tile .s{font-size:11px;color:var(--muted)}
+.tile.hero{background:var(--accent);color:var(--accent-ink)}
+.tile.hero .k,.tile.hero .s{color:inherit;opacity:.85}
+@media (max-width:760px){.group{grid-template-columns:repeat(2,minmax(0,1fr))}.glabel{grid-column:1/-1;padding:6px 12px}.tile .v{font-size:16px}}
+
+.panel{padding-top:16px;display:grid;gap:16px}
+.cols{display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:840px){.cols{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card h2{font-size:17px}
+.card-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.step{font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-top:6px}
+form.f{display:grid;gap:10px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.fl{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+label.fl input,label.fl select{width:100%;color:var(--ink);font-size:16px}
+input.amt{font-family:var(--mono);font-variant-numeric:tabular-nums}
+input[readonly]{background:var(--soft)}
+.tick{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+details.more{border:1px dashed var(--line);border-radius:8px;padding:8px 10px}
+details.more summary{cursor:pointer;font-size:13px;color:var(--muted)}
+details.more[open] summary{margin-bottom:8px}
+.btn{border:0;border-radius:6px;padding:10px 16px;cursor:pointer;font-weight:600;background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--soft);color:var(--ink);font-weight:500}
+.btn.small{padding:6px 10px;font-size:13px}
+.btn.warnbtn{background:var(--warn);color:var(--paper)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.check{font-size:13px;border-radius:6px;padding:8px 10px;background:var(--soft);color:var(--muted)}
+.check.ok{background:var(--good-soft);color:var(--good)}
+.check.off{background:var(--warn-soft);color:var(--warn)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--paper)}
+.seg button{border:0;background:none;padding:7px 12px;cursor:pointer;font-size:14px}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.tools input[type=search]{flex:1;min-width:140px}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;background:var(--soft)}
+td.r,th.r{text-align:right}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.total td{font-weight:600;background:var(--soft)}
+tr.bf td{color:var(--muted)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--accent-soft)}
+th.bal,td.bal{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--good-soft);color:var(--good)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.link{border:0;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;text-decoration:underline}
+.link:hover{color:var(--ink)}
+.link.del:hover{color:var(--bad)}
+.empty{color:var(--muted);font-size:14px;padding:16px 4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--soft);border-radius:6px;padding:6px 10px;font-size:13px;display:flex;gap:8px}
+.chip b{font-family:var(--mono);font-weight:500}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.confirm{display:inline-flex;gap:4px;align-items:center;font-size:12px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:14px;z-index:9;max-width:calc(100% - 32px)}
+.shoplist{display:grid;gap:8px}
+.shoplist .it{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.shoplist input[type=text]{flex:1}
+.ledger td:first-child{white-space:normal}
+.who{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.who b{color:var(--ink);font-weight:600}
+.gate{max-width:420px;margin:48px auto 0;display:grid;gap:16px}
+.gate h2{font-size:24px}
+.userpick{display:grid;gap:8px}
+.userpick button{display:flex;justify-content:space-between;gap:8px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:12px 14px;cursor:pointer}
+.userpick button[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.userpick .role{font-size:12px;color:var(--muted)}
+input.pin{font-family:var(--mono);font-size:22px;letter-spacing:.3em;text-align:center;width:100%}
+.lockmsg{font-size:13px;border-radius:6px;padding:10px;background:var(--soft);color:var(--muted)}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.thumb{position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+.thumb img{width:100%;height:100%;object-fit:cover;cursor:zoom-in}
+.thumb .x{position:absolute;top:2px;right:2px;border:0;background:var(--ink);color:var(--bg);border-radius:99px;width:20px;height:20px;line-height:18px;cursor:pointer;font-size:13px;padding:0}
+.thumb.add{border-style:dashed;cursor:pointer}
+.mini{display:flex;gap:4px}
+.mini img{width:34px;height:34px;object-fit:cover;border-radius:4px;border:1px solid var(--line);cursor:zoom-in}
+.alert{border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:14px 16px;display:grid;gap:10px}
+.alert h2{font-size:16px;color:var(--warn)}
+.chg{font-size:13px}
+.chg b{font-family:var(--mono);font-weight:500}
+.chg .old{text-decoration:line-through;color:var(--muted)}
+.lb{position:fixed;inset:0;z-index:20;background:rgba(10,12,12,.92);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
+.lb[hidden]{display:none!important}
+.lb-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#fff;font-size:14px;flex-wrap:wrap}
+.lb-img{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding-top:10px}
+.lb-img img{max-width:100%;max-height:100%;object-fit:contain}
+.badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:99px;background:var(--warn);color:var(--paper);font-size:11px;line-height:18px;text-align:center;margin-left:4px}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:0;min-width:0}
+legend{font-size:12px;color:var(--muted);padding:0 4px}
+.brand{align-items:center}
+#installBtn{font-size:12px;padding:5px 10px}
+.ioshint{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:15;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.18);font-size:14px;display:grid;gap:8px}
+.ioshint b{font-family:var(--display);font-size:16px}
+.offline-dot{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--warn-soft);color:var(--warn)}
+@media (display-mode:standalone){#installBtn{display:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ===== PASTE YOUR FIREBASE CONFIG HERE =====
+   Firebase console → Project settings → Your apps → Web app → SDK setup and configuration → Config */
+window.GALLA_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBTYS5WrCq2UGq8QtYG7D-RXOLE3lhP7V0",
+  authDomain: "rosy-retail.firebaseapp.com",
+  projectId: "rosy-retail",
+  storageBucket: "rosy-retail.firebasestorage.app",
+  messagingSenderId: "962907967956",
+  appId: "1:962907967956:web:c76265dea139224cb70641"
+};
+</script>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="bar">
+    <div class="bar-in">
+      <div class="brand"><h1>Galla Cash Book</h1><button class="btn small" id="installBtn" type="button" hidden>Install app</button></div>
+      <div class="who" id="who" hidden></div>
+      <select id="shopSel" aria-label="Shop"></select>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="entry">Daily entry</button>
+        <button role="tab" data-tab="payments">Payments</button>
+        <button role="tab" data-tab="purchases">Purchases</button>
+        <button role="tab" data-tab="accounts">Accounts</button>
+        <button role="tab" data-tab="settings">Settings</button>
+      </nav>
+    </div>
+  </header>
+
+  <div class="status" id="status">Opening your books…</div>
+
+  <section class="filter" id="filter" aria-label="Period"></section>
+  <section class="summary" id="summary" aria-label="Summary"></section>
+  <main id="panel" class="panel"></main>
+</div>
+<datalist id="dl-expense"></datalist>
+<datalist id="dl-salary"></datalist>
+<datalist id="dl-party"></datalist>
+<datalist id="dl-partyall"></datalist>
+<div class="toast" id="toast" hidden></div>
+<div class="ioshint" id="iosHint" hidden role="dialog" aria-label="Install on iPhone">
+  <b>Add Galla to your iPhone</b>
+  <span>In Safari, tap the <b style="font-size:inherit">Share</b> button (square with an arrow), then <b style="font-size:inherit">Add to Home Screen</b> → <b style="font-size:inherit">Add</b>.</span>
+  <div class="actions"><button class="btn small" id="iosHintOk" type="button">OK</button></div>
+</div>
+<div class="lb" id="lb" hidden role="dialog" aria-label="Bill photo">
+  <div class="lb-bar"><span id="lbCap"></span><span class="actions"><button class="btn ghost small" id="lbPrev">‹ Prev</button><button class="btn ghost small" id="lbNext">Next ›</button><button class="btn small" id="lbClose">Close</button></span></div>
+  <div class="lb-img"><img id="lbImg" alt="Bill photo"></div>
+</div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const DEFAULT_CATS=["Rent","Electricity","Tea / snacks","Transport","Packaging","Shop maintenance","Advertising","Other"];
+const TYPE={expense:{label:"Expense",plural:"Expenses",nameLabel:"Category",sub:null},
+  salary:{label:"Salary",plural:"Salary",nameLabel:"Staff name",sub:{label:"Type",opts:["Salary","Advance","Bonus","Incentive"]}},
+  party:{label:"Party paid",plural:"Party paid",nameLabel:"Party name",sub:{label:"Bill no.",text:true}}};
+const MODES=["Cash","UPI","Bank"];
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+let db=null,canWrite=true,books={},settings={shops:[],opening:{},users:[]};
+let loaded=false,viewerCanEdit=false,session=null,loginPick=null;
+try{session=JSON.parse(localStorage.getItem("galla-session")||"null")}catch(e){}
+function me(){return session?(settings.users||[]).find(u=>u.id===session.uid)||null:null}
+function isOwnerU(){const u=me();return !!(u&&u.role==="owner")}
+function myShops(){const all=settings.shops||[];const u=me();if(!u)return [];return u.role==="owner"?all:all.filter(s=>(u.shops||[]).includes(s.id))}
+function setSession(uid){session=uid?{uid}:null;try{uid?localStorage.setItem("galla-session",JSON.stringify(session)):localStorage.removeItem("galla-session")}catch(e){}}
+async function hashPin(pin,salt){
+  const txt="galla|"+salt+"|"+pin;
+  try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(txt));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+  catch(e){let h=5381;for(const c of txt)h=((h<<5)+h+c.charCodeAt(0))|0;return "d"+(h>>>0).toString(16)}
+}
+function validPin(p){return /^\d{4,8}$/.test(p)}
+let state={shop:null,tab:"entry",entryDate:todayStr(),preset:"thismonth",unit:"month",from:"",to:"",
+  pay:{type:"expense",editId:null},pf:{type:"all",mode:"all",q:""},af:{group:"auto",issues:false}};
+try{const s=JSON.parse(localStorage.getItem("galla-ui2")||"{}");if(s.tab)state.tab=s.tab;if(s.shop)state.shop=s.shop;if(s.preset&&s.preset!=="custom")state.preset=s.preset;}catch(e){}
+setPreset(state.preset,true);
+function saveUi(){try{localStorage.setItem("galla-ui2",JSON.stringify({tab:state.tab,shop:state.shop,preset:state.preset}))}catch(e){}}
+
+/* ---------- helpers ---------- */
+function pad(n){return String(n).padStart(2,"0")}
+function fmtD(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function todayStr(){return fmtD(new Date())}
+function parse(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return fmtD(d)}
+function lastDay(y,m){return new Date(y,m,0).getDate()}
+function daysBetween(a,b){return Math.round((parse(b)-parse(a))/864e5)}
+const inr=new Intl.NumberFormat("en-IN",{minimumFractionDigits:0,maximumFractionDigits:2});
+function r2(v){return Math.round((+v||0)*100)/100}
+function rs(n){n=r2(n);return (n<0?"−₹":"₹")+inr.format(Math.abs(n))}
+function num(v){const n=parseFloat(v);return isFinite(n)?r2(n):0}
+function hasVal(v){return v!==undefined&&v!==null&&v!==""}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function niceDate(s){const d=parse(s);return d.getDate()+" "+MON[d.getMonth()]+" "+d.getFullYear()}
+function shortDate(s){const d=parse(s);return d.toLocaleDateString("en-IN",{weekday:"short"})+" "+d.getDate()+" "+MON[d.getMonth()]}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2600)}
+function setStatus(msg,err){const s=$("#status");s.textContent=msg||"";s.className="status"+(err?" err":"");s.hidden=!msg}
+function slug(s){return (s||"shop").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40)||"shop"}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function field(id,label,val,extra=""){return `<label class="fl">${label}<input class="amt" type="number" inputmode="decimal" step="0.01" min="0" id="${id}" value="${hasVal(val)?esc(val):""}" ${extra}></label>`}
+
+/* ---------- period filter ---------- */
+function setPreset(p,silent){
+  const t=todayStr(),d=parse(t),y=d.getFullYear(),m=d.getMonth()+1;
+  state.preset=p;
+  if(p==="today"){state.unit="day";state.from=state.to=t}
+  else if(p==="yesterday"){state.unit="day";state.from=state.to=addDays(t,-1)}
+  else if(p==="thismonth"){state.unit="month";state.from=`${y}-${pad(m)}-01`;state.to=`${y}-${pad(m)}-${pad(lastDay(y,m))}`}
+  else if(p==="lastmonth"){const ly=m===1?y-1:y,lm=m===1?12:m-1;state.unit="month";state.from=`${ly}-${pad(lm)}-01`;state.to=`${ly}-${pad(lm)}-${pad(lastDay(ly,lm))}`}
+  else if(p==="thisyear"){state.unit="year";state.from=`${y}-01-01`;state.to=`${y}-12-31`}
+  else if(p==="custom"){state.unit="custom"}
+  if(!silent) render();
+}
+function shift(dir){
+  const u=state.unit;
+  if(u==="day"){state.from=state.to=addDays(state.from,dir)}
+  else if(u==="month"){const d=parse(state.from);d.setMonth(d.getMonth()+dir);const y=d.getFullYear(),m=d.getMonth()+1;state.from=`${y}-${pad(m)}-01`;state.to=`${y}-${pad(m)}-${pad(lastDay(y,m))}`}
+  else if(u==="year"){const y=+state.from.slice(0,4)+dir;state.from=`${y}-01-01`;state.to=`${y}-12-31`}
+  else{const n=daysBetween(state.from,state.to)+1;state.from=addDays(state.from,dir*n);state.to=addDays(state.to,dir*n)}
+  state.preset=matchPreset();render();
+}
+function matchPreset(){
+  const keep=state.unit==="custom"?"custom":null;
+  for(const p of ["today","yesterday","thismonth","lastmonth","thisyear"]){const s={...state};const f=state.from,t=state.to,u=state.unit;setPreset(p,true);const ok=state.from===f&&state.to===t;state.from=f;state.to=t;state.unit=u;state.preset=s.preset;if(ok)return p}
+  return keep||"none";
+}
+function periodLabel(){
+  const f=state.from,t=state.to,d=parse(f);
+  if(state.unit==="day") return shortDate(f)+" "+d.getFullYear();
+  if(state.unit==="month") return MON[d.getMonth()]+" "+d.getFullYear();
+  if(state.unit==="year") return String(d.getFullYear());
+  return niceDate(f)+" – "+niceDate(t);
+}
+
+/* ---------- data ---------- */
+function bookId(shop,ym){return shop+"_"+ym}
+function shopBooks(shop){return Object.values(books).filter(b=>b&&b.shop===shop)}
+function curShop(){return (settings.shops||[]).find(s=>s.id===state.shop)}
+function posOn(){const s=curShop();return !!(s&&s.pos)}
+
+/* All sales for a shop, oldest first. For POS shops the day's sale = today's POS reading − previous reading. */
+let salesCache=new Map(),cacheBooks=null;
+function allSales(shop){
+  if(cacheBooks!==books){salesCache=new Map();cacheBooks=books;}
+  if(salesCache.has(shop)) return salesCache.get(shop);
+  const out=[];
+  for(const b of shopBooks(shop)){const s=b.sales||{};for(const dt in s){const e=s[dt];if(!e||e.deleted)continue;out.push({date:dt,...e});}}
+  out.sort((a,b)=>a.date<b.date?-1:1);
+  let prev=null;
+  for(const e of out){
+    if(!hasVal(e.posReading)) continue;
+    const r=num(e.posReading);
+    if(e.posStart||!prev){e.posIsStart=true;e.posDay=e.posFull?r:0;e.posPrev=null}
+    else{e.posIsStart=false;e.posDay=r2(r-prev.r);e.posPrev=prev}
+    e.total=r2(e.posDay+num(e.ret));
+    prev={r,date:e.date};
+  }
+  salesCache.set(shop,out);return out;
+}
+function allPurchases(shop){
+  const out=[];
+  for(const b of shopBooks(shop)){const s=b.purchases||{};for(const id in s){const e=s[id];if(!e||e.deleted)continue;out.push({id,...e})}}
+  return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
+}
+function salesBetween(shop,from,to){return allSales(shop).filter(e=>e.date>=from&&e.date<=to)}
+function prevReading(shop,date){let p=null;for(const e of allSales(shop)){if(e.date>=date)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
+function lastReading(shop,upto){let p=null;for(const e of allSales(shop)){if(e.date>upto)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
+function txnsBetween(shop,from,to,type){
+  const out=[];
+  for(const b of shopBooks(shop)){const t=b.txns||{};for(const id in t){const e=t[id];if(!e||e.deleted)continue;if(type&&e.type!==type)continue;if(e.date>=from&&e.date<=to)out.push({id,...e})}}
+  return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
+}
+function totals(shop,from,to){
+  const t={gross:0,ret:0,cash:0,upi:0,unpaid:0,duesCash:0,duesUpi:0,expense:0,salary:0,party:0,cashOut:0,bankOut:0,days:0,openUnpaid:0};
+  for(const s of salesBetween(shop,from,to)){
+    t.gross+=num(s.total);t.ret+=num(s.ret);t.cash+=num(s.cash);t.upi+=num(s.upi);t.unpaid+=num(s.unpaid);
+    t.duesCash+=num(s.duesCash);t.duesUpi+=num(s.duesUpi);t.days++;
+    if(s.posIsStart) t.openUnpaid+=num(s.posOpenUnpaid);
+  }
+  for(const x of txnsBetween(shop,from,to)){t[x.type]+=num(x.amount);if(x.mode==="Cash")t.cashOut+=num(x.amount);else t.bankOut+=num(x.amount)}
+  for(const k in t) t[k]=r2(t[k]);
+  t.net=r2(t.gross-t.ret);t.out=r2(t.expense+t.salary+t.party);
+  t.cashFlow=r2(t.cash+t.duesCash-t.cashOut);t.bankFlow=r2(t.upi+t.duesUpi-t.bankOut);
+  t.dues=r2(t.duesCash+t.duesUpi);
+  return t;
+}
+function opening(shop){const o=(settings.opening||{})[shop]||{};return {date:o.date||"0000-01-01",cash:num(o.amount),bank:num(o.bank)}}
+function cashInHand(shop,upto){const o=opening(shop);if(upto<o.date)return null;return r2(o.cash+totals(shop,o.date,upto).cashFlow)}
+function bankBalance(shop,upto){const o=opening(shop);if(upto<o.date)return null;return r2(o.bank+totals(shop,o.date,upto).bankFlow)}
+function outstanding(shop,upto){const t=totals(shop,"0000-01-01",upto);return r2(t.openUnpaid+t.unpaid-t.dues)}
+function splitDiff(s){return r2(num(s.total)-num(s.ret)-num(s.cash)-num(s.upi)-num(s.unpaid))}
+function issuesOf(s){
+  const out=[];
+  if(!s) return out;
+  const d=splitDiff(s);if(d) out.push((d>0?"Split short ":"Split over ")+rs(Math.abs(d)));
+  if(posOn()){if(!hasVal(s.posReading))out.push("No POS reading");else if(!s.posIsStart&&s.posDay<0)out.push("POS reading dropped")}
+  return out;
+}
+
+/* ---------- writes ---------- */
+async function ensureBook(shop,date){
+  const ym=date.slice(0,7),id=bookId(shop,ym),ref=db.doc("books/"+id);
+  if(books[id]) return ref;
+  const snap=await ref.get();
+  if(!snap.exists) await ref.set({shop,month:ym,sales:{},txns:{}});
+  return ref;
+}
+async function write(fn,okMsg){
+  if(!db){toast("Saving is unavailable here");return false}
+  try{
+    const r=await Promise.race([fn().then(()=>"ok"),new Promise(res=>setTimeout(()=>res("queued"),5000))]);
+    toast(r==="queued"?"Saved on this device. It will sync when the internet is back.":(okMsg||"Saved"));return true}
+  catch(e){
+    if(e&&e.code==="permission-denied") toast("Not allowed to save. Check the Firestore rules (see setup guide).");
+    else if(e&&e.code==="quota_exceeded") toast("Storage is full. Delete old entries to save new ones.");
+    else if(e&&e.code==="unavailable") toast("Connection problem. Try saving again.");
+    else toast("Could not save: "+(e&&e.message||"unknown error"));
+    return false;
+  }
+}
+const saveSale=(date,entry)=>write(async()=>{const ref=await ensureBook(state.shop,date);await ref.update({sales:{[date]:{...entry,deleted:false,at:Date.now()}}})},"Saved "+niceDate(date));
+const deleteSale=date=>write(async()=>{const ref=await ensureBook(state.shop,date);await ref.update({sales:{[date]:{deleted:true,at:Date.now()}}})},"Day entry removed");
+async function saveTxn(entry,id,oldDate){
+  const nid=id||uid();
+  return write(async()=>{
+    if(id&&oldDate&&oldDate.slice(0,7)!==entry.date.slice(0,7)){const old=await ensureBook(state.shop,oldDate);await old.update({txns:{[id]:{deleted:true}}})}
+    const ref=await ensureBook(state.shop,entry.date);await ref.update({txns:{[nid]:{...entry,deleted:false,at:Date.now()}}})
+  },TYPE[entry.type].label+(id?" updated":" saved"));
+}
+async function savePurchase(entry,id,oldDate,msg){
+  const nid=id||uid();
+  return write(async()=>{
+    if(id&&oldDate&&oldDate.slice(0,7)!==entry.date.slice(0,7)){const old=await ensureBook(state.shop,oldDate);await old.update({purchases:{[id]:{deleted:true}}})}
+    const ref=await ensureBook(state.shop,entry.date);await ref.update({purchases:{[nid]:{...entry,deleted:false}}})
+  },msg);
+}
+const updatePurchase=(x,patch,msg)=>write(async()=>{const ref=await ensureBook(state.shop,x.date);await ref.update({purchases:{[x.id]:patch}})},msg);
+const deleteTxn=x=>write(async()=>{const ref=await ensureBook(state.shop,x.date);await ref.update({txns:{[x.id]:{deleted:true}}})},"Entry removed");
+const saveSettings=next=>write(async()=>{await db.doc("settings/main").set(next)},"Settings saved");
+
+/* ---------- render ---------- */
+function render(){
+  saveUi();
+  const gate=!loaded||!(settings.users||[]).length||!me();
+  $("#shopSel").hidden=gate;$("nav.tabs").hidden=gate;$("#who").hidden=gate;
+  if(gate){$("#filter").innerHTML="";$("#summary").innerHTML="";
+    if(!loaded){$("#panel").innerHTML="";return}
+    if(!(settings.users||[]).length){renderSetup();return}
+    renderLogin();return}
+  const u=me(),owner=isOwnerU();
+  $("#who").innerHTML=`<span><b>${esc(u.name)}</b> · ${owner?"Owner":"Shop manager"}</span><button class="link" id="logout">Log out</button>`;
+  $("#logout").onclick=()=>{setSession(null);loginPick=u.id;render()};
+  const allowedTabs=owner?["entry","payments","purchases","accounts","settings"]:["entry","payments","purchases"];
+  if(!allowedTabs.includes(state.tab)) state.tab="entry";
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.hidden=!allowedTabs.includes(b.dataset.tab));
+  const shops=myShops();
+  if(!shops.find(s=>s.id===state.shop)) state.shop=shops[0]?shops[0].id:null;
+  $("#shopSel").innerHTML=shops.map(s=>`<option value="${esc(s.id)}"${s.id===state.shop?" selected":""}>${esc(s.name)}</option>`).join("")||`<option>No shop yet</option>`;
+  $("#shopSel").disabled=shops.length<2;
+  if(!owner&&!state.shop){$("#panel").innerHTML=`<div class="card"><h2>No shop assigned</h2><p class="muted">Ask the owner to give your login a shop in Settings.</p></div>`;return}
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===state.tab)));
+  renderFilter();renderDatalists();renderSummary();
+  const p=$("#panel");
+  if(!state.shop&&state.tab!=="settings"){p.innerHTML=`<div class="card"><h2>Add your first shop</h2><p class="muted">Open Settings and add the shop you keep a cash book for.</p><button class="btn" id="goSet">Open Settings</button></div>`;$("#goSet").onclick=()=>{state.tab="settings";render()};return}
+  const pend=owner&&state.shop?allPurchases(state.shop).filter(x=>x.reviewPending).length:0;
+  const pt=document.querySelector('nav.tabs button[data-tab="purchases"]');pt.innerHTML="Purchases"+(pend?`<span class="badge">${pend}</span>`:"");
+  ({entry:renderEntry,payments:renderPayments,purchases:renderPurchases,accounts:renderAccounts,settings:renderSettings})[state.tab]();
+}
+
+function renderSetup(){
+  const p=$("#panel");
+  p.innerHTML=`<div class="gate"><div class="card"><h2 style="margin-bottom:6px">Create the owner login</h2>
+    <p class="muted small" style="margin-top:0">You'll use this passcode to open the books. Shop manager logins are added later in Settings.</p>
+    <form class="f" id="setupForm" autocomplete="off">
+      <label class="fl">Your name<input type="text" id="su_name" required placeholder="e.g. Mahendra"></label>
+      <div class="row2"><label class="fl">Passcode (4–8 digits)<input class="pin" type="password" inputmode="numeric" id="su_pin" required></label>
+      <label class="fl">Repeat passcode<input class="pin" type="password" inputmode="numeric" id="su_pin2" required></label></div>
+      <button class="btn" type="submit">Create owner login</button>
+    </form></div>
+    <div class="card"><h2 style="margin-bottom:6px">Moving from the old cash book?</h2>
+      <p class="muted small" style="margin-top:0">Restore a backup file instead. Your shops, logins, passcodes and entries come back exactly as they were.</p>
+      <div class="actions"><label class="btn ghost" for="restoreFile">Restore from backup file</label><input type="file" id="restoreFile" accept="application/json,.json" hidden></div>
+    </div></div>`;
+  $("#restoreFile").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)restoreBackup(f)};
+  $("#setupForm").onsubmit=async e=>{e.preventDefault();
+    const name=$("#su_name").value.trim(),pin=$("#su_pin").value;
+    if(!name){toast("Enter your name");return}
+    if(!validPin(pin)){toast("Passcode must be 4 to 8 digits");return}
+    if(pin!==$("#su_pin2").value){toast("The two passcodes don't match");return}
+    const id=uid(),user={id,name,role:"owner",shops:[],pin:await hashPin(pin,id)};
+    if(await saveSettings({...settings,users:[user]})){setSession(id);settings={...settings,users:[user]};render();}
+  };
+}
+function renderLogin(){
+  const p=$("#panel"),users=settings.users||[],shops=settings.shops||[];
+  if(!loginPick||!users.find(u=>u.id===loginPick)){try{loginPick=localStorage.getItem("galla-last")}catch(e){}}
+  if(!users.find(u=>u.id===loginPick)) loginPick=users.length===1?users[0].id:null;
+  const shopNames=u=>u.role==="owner"?"Owner · all shops":"Manager · "+((u.shops||[]).map(id=>(shops.find(s=>s.id===id)||{}).name).filter(Boolean).join(", ")||"no shop");
+  p.innerHTML=`<div class="gate"><div class="card"><h2 style="margin-bottom:12px">Who is entering?</h2>
+    <div class="userpick">${users.map(u=>`<button type="button" data-u="${u.id}" aria-pressed="${u.id===loginPick}"><b>${esc(u.name)}</b><span class="role">${esc(shopNames(u))}</span></button>`).join("")}</div>
+    <form class="f" id="loginForm" style="margin-top:14px" autocomplete="off"${loginPick?"":" hidden"}>
+      <label class="fl">Passcode<input class="pin" type="password" inputmode="numeric" id="li_pin" autocomplete="off"></label>
+      <button class="btn" type="submit">Unlock</button>
+    </form></div>
+    <p class="muted small" style="text-align:center">Forgot the passcode? The owner can reset it in Settings.</p></div>`;
+  p.querySelectorAll("[data-u]").forEach(b=>b.onclick=()=>{loginPick=b.dataset.u;render();const i=$("#li_pin");if(i)i.focus()});
+  const f=$("#loginForm");if(!f) return;
+  const pinEl=$("#li_pin");if(loginPick) setTimeout(()=>pinEl.focus(),0);
+  f.onsubmit=async e=>{e.preventDefault();
+    const u=users.find(x=>x.id===loginPick);if(!u)return;
+    if(await hashPin(pinEl.value,u.id)!==u.pin){pinEl.value="";toast("Wrong passcode. Try again.");return}
+    try{localStorage.setItem("galla-last",u.id)}catch(e){}
+    setSession(u.id);if(u.role!=="owner")state.tab="entry";state.entryDate=todayStr();render();
+  };
+}
+
+function renderFilter(){
+  const el=$("#filter");
+  if(state.tab==="settings"){el.innerHTML="";el.hidden=true;return}
+  el.hidden=false;
+  if(state.tab==="entry"){
+    el.innerHTML=`<div class="quick"><button data-d="0" aria-pressed="${state.entryDate===todayStr()}">Today</button><button data-d="-1" aria-pressed="${state.entryDate===addDays(todayStr(),-1)}">Yesterday</button></div>
+      <div class="stepper"><button class="iconbtn" id="ePrev" aria-label="Previous day">‹</button><span class="plabel">${esc(shortDate(state.entryDate)+" "+state.entryDate.slice(0,4))}</span><button class="iconbtn" id="eNext" aria-label="Next day">›</button><input type="date" id="eDate" value="${state.entryDate}" aria-label="Pick date"></div>`;
+    el.querySelectorAll(".quick button").forEach(b=>b.onclick=()=>{state.entryDate=addDays(todayStr(),+b.dataset.d);render()});
+    $("#ePrev").onclick=()=>{state.entryDate=addDays(state.entryDate,-1);render()};
+    $("#eNext").onclick=()=>{state.entryDate=addDays(state.entryDate,1);render()};
+    $("#eDate").onchange=e=>{if(e.target.value){state.entryDate=e.target.value;render()}};
+    return;
+  }
+  const P=[["today","Today"],["yesterday","Yesterday"],["thismonth","This month"],["lastmonth","Last month"],["thisyear","This year"],["custom","Custom"]];
+  el.innerHTML=`<div class="quick">${P.map(([k,l])=>`<button data-p="${k}" aria-pressed="${state.preset===k}">${l}</button>`).join("")}</div>
+    ${state.unit==="custom"?`<div class="custom">From <input type="date" id="cFrom" value="${state.from}"> to <input type="date" id="cTo" value="${state.to}"></div>`:""}
+    <div class="stepper"><button class="iconbtn" id="pPrev" aria-label="Previous period">‹</button><span class="plabel">${esc(periodLabel())}</span><button class="iconbtn" id="pNext" aria-label="Next period">›</button></div>`;
+  el.querySelectorAll(".quick button").forEach(b=>b.onclick=()=>setPreset(b.dataset.p));
+  $("#pPrev").onclick=()=>shift(-1);$("#pNext").onclick=()=>shift(1);
+  const cf=$("#cFrom"),ct=$("#cTo");
+  if(cf){const upd=()=>{let f=cf.value,t=ct.value;if(!f||!t)return;if(f>t)[f,t]=[t,f];state.from=f;state.to=t;render()};cf.onchange=upd;ct.onchange=upd}
+}
+
+function renderDatalists(){
+  if(!state.shop) return;
+  const all=txnsBetween(state.shop,"0000","9999");
+  for(const t of ["expense","salary","party"]){
+    const names=new Set(t==="expense"?DEFAULT_CATS:[]);
+    all.filter(x=>x.type===t).forEach(x=>x.name&&names.add(x.name));
+    $("#dl-"+t).innerHTML=[...names].map(n=>`<option value="${esc(n)}">`).join("");
+  }
+}
+
+function renderSummary(){
+  const el=$("#summary");
+  if(!state.shop||state.tab==="settings"){el.innerHTML="";return}
+  const [from,to]=state.tab==="entry"?[state.entryDate,state.entryDate]:[state.from,state.to];
+  const t=totals(state.shop,from,to),cih=cashInHand(state.shop,to),bank=bankBalance(state.shop,to),due=outstanding(state.shop,to);
+  const lr=posOn()?lastReading(state.shop,to):null;
+  el.innerHTML=`
+  <div class="group"><div class="glabel">Sales</div>
+    <div class="tile hero"><span class="k">Net sale</span><span class="v">${rs(t.net)}</span><span class="s">Return ${rs(t.ret)}</span></div>
+    <div class="tile"><span class="k">Cash</span><span class="v">${rs(t.cash)}</span><span class="s">+ dues ${rs(t.duesCash)}</span></div>
+    <div class="tile"><span class="k">UPI</span><span class="v">${rs(t.upi)}</span><span class="s">+ dues ${rs(t.duesUpi)}</span></div>
+    <div class="tile"><span class="k">Unpaid</span><span class="v">${rs(t.unpaid)}</span><span class="s">New credit given</span></div></div>
+  <div class="group"><div class="glabel">Paid out</div>
+    <div class="tile"><span class="k">Expenses</span><span class="v">${rs(t.expense)}</span></div>
+    <div class="tile"><span class="k">Salary</span><span class="v">${rs(t.salary)}</span></div>
+    <div class="tile"><span class="k">Party paid</span><span class="v">${rs(t.party)}</span></div>
+    <div class="tile"><span class="k">Total paid out</span><span class="v">${rs(t.out)}</span><span class="s">Cash ${rs(t.cashOut)} · UPI/bank ${rs(t.bankOut)}</span></div></div>
+  ${isOwnerU()?`<div class="group"><div class="glabel">Balance</div>
+    <div class="tile"><span class="k">Cash in galla</span><span class="v">${cih==null?"—":rs(cih)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
+    <div class="tile"><span class="k">UPI / bank</span><span class="v">${bank==null?"—":rs(bank)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
+    <div class="tile"><span class="k">Unpaid due</span><span class="v">${rs(due)}</span><span class="s">From customers</span></div>
+    <div class="tile"><span class="k">${posOn()?"POS reading":"Days entered"}</span><span class="v">${posOn()?(lr?rs(lr.r):"—"):t.days}</span><span class="s">${posOn()?(lr?"On "+esc(niceDate(lr.date)):"None yet"):""}</span></div></div>`:""}`;
+}
+
+/* ---------- Daily entry ---------- */
+function renderEntry(){
+  const p=$("#panel"),date=state.entryDate,pos=posOn();
+  const ex=salesBetween(state.shop,date,date)[0]||{};
+  const prev=pos?prevReading(state.shop,date):null;
+  const duesOpen=num(ex.duesCash)||num(ex.duesUpi);
+  p.innerHTML=`<div class="cols">
+    <div class="card"><div class="card-head"><h2>Sales · ${esc(niceDate(date))}</h2>${ex.date?'<span class="pill ok">Saved</span>':'<span class="pill">Not entered</span>'}</div>
+      <form class="f" id="saleForm" autocomplete="off">
+        ${pos?`<div class="step">1 · POS reading</div>
+        <div class="row2">${field("s_posReading","POS sales reading (running total)",ex.posReading)}<label class="fl">Previous reading<input type="text" readonly id="s_prev" value="${prev?esc(rs(prev.r)+" · "+shortDate(prev.date)):"None yet"}"></label></div>
+        <label class="tick"><input type="checkbox" id="s_posStart"${ex.posStart||(!prev&&!ex.date)?" checked":""}> Starting reading, or POS counter reset today</label>
+        <div id="s_startOpts" class="f" hidden>
+          <label class="tick"><input type="checkbox" id="s_posFull"${ex.posFull?" checked":""}> Whole reading is today's sale</label>
+          ${field("s_posOpenUnpaid","Unpaid already inside this reading (opens unpaid account)",ex.posOpenUnpaid)}
+        </div>
+        <div class="step">2 · Split today's sale</div>`:`<div class="step">1 · Today's sale</div>`}
+        <div class="row2">${field("s_total",pos?"Today's sale (from POS)":"Total sale",pos&&hasVal(ex.posReading)?"":ex.total,pos?"readonly":"")}${field("s_ret","Sale return",ex.ret)}</div>
+        <div class="row2">${field("s_cash","Cash",ex.cash)}${field("s_upi","UPI",ex.upi)}</div>
+        <div class="row2">${field("s_unpaid","Unpaid (udhaar)",ex.unpaid)}<label class="fl">&nbsp;<button class="btn ghost small" type="button" id="fillCash">Rest is cash</button></label></div>
+        <details class="more"${duesOpen?" open":""}><summary>Old dues received today</summary>
+          <div class="row2">${field("s_duesCash","Dues in cash",ex.duesCash)}${field("s_duesUpi","Dues by UPI",ex.duesUpi)}</div></details>
+        <label class="fl">Note<input type="text" id="s_note" value="${esc(ex.note||"")}" placeholder="Optional"></label>
+        <div id="s_check" class="check"></div>
+        <div class="actions">
+          <button class="btn" type="submit" id="saveBtn"${canWrite?"":" disabled"}>${ex.date?"Update":"Save"} day</button>
+          ${ex.date&&isOwnerU()?`<span id="delWrap"><button class="link del" type="button" id="delSale">Delete day</button></span>`:""}
+        </div>
+        ${ex.by?`<p class="muted small" style="margin:0">Entered by ${esc(ex.by)}${ex.editedBy&&ex.editedBy!==ex.by?" · last changed by "+esc(ex.editedBy):""}</p>`:""}
+      </form>
+    </div>
+    <div class="card"><div class="card-head"><h2>Day ledger</h2><button class="btn ghost small" id="addPay">+ Add payment for this day</button></div>${dayLedger(date)}</div>
+  </div>`;
+  const form=$("#saleForm"),btn=$("#saveBtn");
+  if(!isOwnerU()&&ex.date){
+    form.querySelectorAll("input,select,button").forEach(el=>el.disabled=true);
+    btn.parentElement.innerHTML=`<div class="lockmsg">This day is saved. Only the owner can change it. Tell the owner if something is wrong.</div>`;
+  }
+  const net=()=>pos&&hasVal($("#s_posReading").value)?posDay():r2(num($("#s_total").value)-num($("#s_ret").value));
+  function posDay(){
+    const r=num($("#s_posReading").value),isStart=$("#s_posStart").checked||!prev;
+    return isStart?($("#s_posFull").checked?r:0):r2(r-prev.r);
+  }
+  function update(ev){
+    if(ev!=="keep"){form.dataset.ok="";btn.className="btn";btn.textContent=(ex.date?"Update":"Save")+" day";}
+    const c=$("#s_check");
+    if(pos){
+      const isStart=$("#s_posStart").checked||!prev;
+      $("#s_startOpts").hidden=!isStart;
+      const tot=$("#s_total");
+      if(hasVal($("#s_posReading").value)){tot.readOnly=true;tot.value=r2(posDay()+num($("#s_ret").value))}
+      else{tot.readOnly=false}
+    }
+    const n=net(),got=r2(num($("#s_cash").value)+num($("#s_upi").value)+num($("#s_unpaid").value)),diff=r2(n-got);
+    let msg="",cls="";
+    if(pos&&hasVal($("#s_posReading").value)){
+      const isStart=$("#s_posStart").checked||!prev,r=num($("#s_posReading").value);
+      if(!isStart&&posDay()<0){c.className="check off";c.textContent="POS reading is "+rs(-posDay())+" lower than the previous one. If the counter was reset, tick the box above.";return diff}
+      msg=isStart?(n?"Today's sale (whole reading): "+rs(n)+". ":"Starting reading saved as the base. "+(num($("#s_posOpenUnpaid").value)?rs(num($("#s_posOpenUnpaid").value))+" opens the unpaid account. ":"")):"POS "+rs(r)+" − "+rs(prev.r)+" = today's sale "+rs(n)+". ";
+    }
+    if(!n&&!got){c.className="check";c.textContent=msg||(pos?"Enter today's POS reading. Today's sale = this reading − previous reading.":"Enter today's total sale and how it was received.");return 0}
+    if(diff===0){cls="ok";msg+="Tallies: cash + UPI + unpaid = "+rs(n)+"."}
+    else{cls="off";msg+=(diff>0?"Short by ":"Over by ")+rs(Math.abs(diff))+": cash + UPI + unpaid = "+rs(got)+", sale is "+rs(n)+"."}
+    c.className="check "+cls;c.textContent=msg;return diff;
+  }
+  form.addEventListener("input",update);form.addEventListener("change",update);update();
+  $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_unpaid").value)));update()};
+  form.onsubmit=async e=>{e.preventDefault();
+    const diff=update("keep");
+    if(pos&&hasVal($("#s_posReading").value)&&!($("#s_posStart").checked||!prev)&&posDay()<0){toast("Fix the POS reading first");return}
+    if(diff&&form.dataset.ok!=="1"){form.dataset.ok="1";btn.className="btn warnbtn";btn.textContent="Save anyway ("+(diff>0?"short ":"over ")+rs(Math.abs(diff))+")";toast("The day does not tally. Check the amounts or tap again to save.");return}
+    const entry={ret:num($("#s_ret").value),cash:num($("#s_cash").value),upi:num($("#s_upi").value),unpaid:num($("#s_unpaid").value),
+      duesCash:num($("#s_duesCash").value),duesUpi:num($("#s_duesUpi").value),note:$("#s_note").value.trim(),total:num($("#s_total").value)};
+    if(pos){const v=$("#s_posReading").value;entry.posReading=v===""?null:num(v);const isStart=($("#s_posStart").checked||!prev)&&v!=="";
+      entry.posStart=isStart;entry.posFull=isStart&&$("#s_posFull").checked;entry.posOpenUnpaid=isStart?num($("#s_posOpenUnpaid").value):0;}
+    if(!isOwnerU()&&salesBetween(state.shop,date,date)[0]){toast("This day is already saved. Only the owner can change it.");render();return}
+    entry.by=ex.by||me().name;if(ex.date)entry.editedBy=me().name;
+    await saveSale(date,entry);
+  };
+  const ds=$("#delSale");if(ds) ds.onclick=()=>confirmInline($("#delWrap"),()=>deleteSale(date));
+  $("#addPay").onclick=()=>{state.tab="payments";state.pay.editId=null;state.pay.date=date;render()};
+  p.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.tab="payments";state.pay.editId=b.dataset.edit;render()});
+}
+
+function dayLedger(date){
+  const tx=txnsBetween(state.shop,date,date),t=totals(state.shop,date,date);
+  const yd=addDays(date,-1),oc=cashInHand(state.shop,yd),ob=bankBalance(state.shop,yd),od=outstanding(state.shop,yd);
+  const cc=cashInHand(state.shop,date),cb=bankBalance(state.shop,date),cd=outstanding(state.shop,date);
+  const f=v=>v==null?"—":rs(v);
+  const cashTx=tx.filter(x=>x.mode==="Cash"),bankTx=tx.filter(x=>x.mode!=="Cash");
+  const owner=isOwnerU();
+  const txRow=x=>`<tr><td>${esc(TYPE[x.type].label)} · ${esc(x.name||"")}${x.sub?` <span class="muted">(${esc(x.sub)})</span>`:""}${owner?` <button class="link" data-edit="${x.id}">edit</button>`:""}</td><td class="num r">− ${rs(x.amount)}</td></tr>`;
+  if(!owner) return `<div class="tbl-wrap"><table class="ledger"><tbody>
+    <tr><th colspan="2">Galla cash today</th></tr>
+    <tr class="bf"><td>Opening</td><td class="num r">${f(oc)}</td></tr>
+    <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
+    ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
+    ${cashTx.map(txRow).join("")}
+    <tr class="total"><td>Cash that should be in galla</td><td class="num r">${f(cc)}</td></tr>
+    ${bankTx.length?`<tr><th colspan="2">Paid by UPI / bank</th></tr>${bankTx.map(txRow).join("")}`:""}
+  </tbody></table></div>`;
+  return `<div class="tbl-wrap"><table class="ledger"><tbody>
+    <tr><th colspan="2">Galla cash</th></tr>
+    <tr class="bf"><td>Opening</td><td class="num r">${f(oc)}</td></tr>
+    <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
+    ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
+    ${cashTx.map(txRow).join("")}
+    <tr class="total"><td>Closing cash</td><td class="num r">${f(cc)}</td></tr>
+    <tr><th colspan="2">UPI / bank</th></tr>
+    <tr class="bf"><td>Opening</td><td class="num r">${f(ob)}</td></tr>
+    <tr><td>UPI sale</td><td class="num r">+ ${rs(t.upi)}</td></tr>
+    ${t.duesUpi?`<tr><td>Dues received by UPI</td><td class="num r">+ ${rs(t.duesUpi)}</td></tr>`:""}
+    ${bankTx.map(txRow).join("")}
+    <tr class="total"><td>Closing UPI / bank</td><td class="num r">${f(cb)}</td></tr>
+    <tr><th colspan="2">Unpaid (udhaar)</th></tr>
+    <tr class="bf"><td>Opening due</td><td class="num r">${rs(od)}</td></tr>
+    <tr><td>Unpaid sale${t.openUnpaid?" + opening from POS":""}</td><td class="num r">+ ${rs(t.unpaid+t.openUnpaid)}</td></tr>
+    ${t.dues?`<tr><td>Dues received</td><td class="num r">− ${rs(t.dues)}</td></tr>`:""}
+    <tr class="total"><td>Closing due</td><td class="num r">${rs(cd)}</td></tr>
+  </tbody></table></div>`;
+}
+
+/* ---------- Payments ---------- */
+function renderPayments(){
+  const p=$("#panel"),{from,to}=state,pf=state.pf;
+  const owner=isOwnerU();
+  if(!owner) state.pay.editId=null;
+  const editing=state.pay.editId?txnsBetween(state.shop,"0000","9999").find(x=>x.id===state.pay.editId):null;
+  if(editing) state.pay.type=editing.type;
+  const type=state.pay.type,T=TYPE[type];
+  const defDate=editing?editing.date:(state.pay.date||(todayStr()>=from&&todayStr()<=to?todayStr():to));
+  let list=txnsBetween(state.shop,from,to).reverse();
+  if(pf.type!=="all") list=list.filter(x=>x.type===pf.type);
+  if(pf.mode!=="all") list=list.filter(x=>pf.mode==="Cash"?x.mode==="Cash":x.mode!=="Cash");
+  if(pf.q){const q=pf.q.toLowerCase();list=list.filter(x=>[x.name,x.sub,x.note,String(x.amount)].some(v=>String(v||"").toLowerCase().includes(q)))}
+  const total=r2(list.reduce((a,x)=>a+num(x.amount),0));
+  const byType={};list.forEach(x=>byType[x.type]=r2((byType[x.type]||0)+num(x.amount)));
+  const byName={};list.forEach(x=>{const k=x.name||"—";byName[k]=r2((byName[k]||0)+num(x.amount))});
+  p.innerHTML=`<div class="cols">
+    <div class="card"><div class="card-head"><h2>${editing?"Edit payment":"Add payment"}</h2>${editing?'<button class="link" id="cancelEdit">Cancel edit</button>':""}</div>
+      <form class="f" id="txForm" autocomplete="off">
+        <div class="seg" role="group" aria-label="Payment type">${Object.entries(TYPE).map(([k,v])=>`<button type="button" data-type="${k}" aria-pressed="${k===type}">${v.label}</button>`).join("")}</div>
+        <div class="row2"><label class="fl">Date<input type="date" id="t_date" value="${defDate}" required></label>${field("t_amount","Amount",editing?editing.amount:"","required")}</div>
+        <label class="fl">${T.nameLabel}<input type="text" id="t_name" list="dl-${type}" required value="${editing?esc(editing.name):""}"></label>
+        <div class="row2">
+          <label class="fl">Paid by<select id="t_mode">${MODES.map(m=>`<option${editing&&editing.mode===m?" selected":""}>${m}</option>`).join("")}</select></label>
+          ${T.sub?(T.sub.opts?`<label class="fl">${T.sub.label}<select id="t_sub">${T.sub.opts.map(o=>`<option${editing&&editing.sub===o?" selected":""}>${o}</option>`).join("")}</select></label>`:`<label class="fl">${T.sub.label}<input type="text" id="t_sub" placeholder="Optional" value="${editing?esc(editing.sub||""):""}"></label>`):"<div></div>"}
+        </div>
+        <label class="fl">Note<input type="text" id="t_note" placeholder="Optional" value="${editing?esc(editing.note||""):""}"></label>
+        <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>${editing?"Update":"Save"} ${T.label.toLowerCase()}</button></div>
+        <p class="muted small" style="margin:0">Cash comes out of the galla. UPI and bank come out of the UPI / bank account.</p>
+      </form>
+    </div>
+    <div class="card"><div class="card-head"><h2>Payments · ${esc(periodLabel())}</h2></div>
+      <div class="tools">
+        <select id="f_type" aria-label="Type"><option value="all">All types</option>${Object.entries(TYPE).map(([k,v])=>`<option value="${k}"${pf.type===k?" selected":""}>${v.label}</option>`).join("")}</select>
+        <select id="f_mode" aria-label="Paid by"><option value="all">Cash + UPI/bank</option><option value="Cash"${pf.mode==="Cash"?" selected":""}>Cash only</option><option value="bank"${pf.mode==="bank"?" selected":""}>UPI / bank only</option></select>
+        <input type="search" id="f_q" placeholder="Search name, bill, note, amount" value="${esc(pf.q)}">
+      </div>
+      <div class="chips" style="margin-bottom:12px"><span class="chip">Total <b>${rs(total)}</b></span><span class="chip">${list.length} entr${list.length===1?"y":"ies"}</span>
+        ${Object.entries(byType).map(([k,v])=>`<span class="chip">${esc(TYPE[k].label)} <b>${rs(v)}</b></span>`).join("")}</div>
+      ${Object.keys(byName).length>1?`<details class="more" style="margin-bottom:12px"><summary>Totals by name / category</summary><div class="chips">${Object.entries(byName).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${rs(v)}</b></span>`).join("")}</div></details>`:""}
+      ${list.length?`<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Detail</th><th>Paid by</th><th class="r">Amount</th><th></th></tr></thead><tbody>
+      ${list.map(x=>`<tr${x.id===state.pay.editId?' style="background:var(--accent-soft)"':""}><td>${esc(shortDate(x.date))}</td><td>${esc(TYPE[x.type].label)}</td><td>${esc(x.name)}</td><td class="muted">${esc([x.sub,x.note].filter(Boolean).join(" · "))}</td><td><span class="pill${x.mode==="Cash"?" ok":""}">${esc(x.mode)}</span></td><td class="num r">${rs(x.amount)}</td><td>${owner?`<button class="link" data-edit="${x.id}">Edit</button><span class="dw"><button class="link del" data-del="${x.id}"${canWrite?"":" disabled"}>Delete</button></span>`:`<span class="muted small">${esc(x.by||"")}</span>`}</td></tr>`).join("")}
+      <tr class="total"><td colspan="5">Total</td><td class="num r">${rs(total)}</td><td></td></tr>
+      </tbody></table></div>`:`<p class="empty">No payments match for ${esc(periodLabel())}.</p>`}
+    </div></div>`;
+  p.querySelectorAll(".seg button[data-type]").forEach(b=>b.onclick=()=>{state.pay.type=b.dataset.type;state.pay.editId=null;render()});
+  const ce=$("#cancelEdit");if(ce) ce.onclick=()=>{state.pay.editId=null;render()};
+  $("#f_type").onchange=e=>{pf.type=e.target.value;render()};
+  $("#f_mode").onchange=e=>{pf.mode=e.target.value;render()};
+  let qt;$("#f_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{pf.q=e.target.value.trim();render();const q=$("#f_q");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)};
+  $("#txForm").onsubmit=async e=>{e.preventDefault();
+    const amt=num($("#t_amount").value);if(amt<=0){toast("Enter an amount above zero");return}
+    const entry={type,date:$("#t_date").value,amount:amt,name:$("#t_name").value.trim(),mode:$("#t_mode").value,note:$("#t_note").value.trim()};
+    if(T.sub) entry.sub=$("#t_sub").value.trim();
+    entry.by=editing&&editing.by?editing.by:me().name;if(editing)entry.editedBy=me().name;
+    if(editing&&editing.settles&&type==="party"){let left=amt;const st=[];for(const [id,a] of settleList(editing)){const v=Math.min(a,left);if(v>0){st.push({b:id,a:r2(v)});left=r2(left-v)}}entry.settles=st;}
+    if(await saveTxn(entry,editing&&editing.id,editing&&editing.date)){state.pay.editId=null;state.pay.date=entry.date;render();$("#t_amount").focus()}
+  };
+  p.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.pay.editId=b.dataset.edit;render();window.scrollTo({top:0,behavior:"smooth"})});
+  p.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const x=list.find(i=>i.id===b.dataset.del);confirmInline(b.parentElement,()=>deleteTxn(x))});
+}
+
+/* ---------- Purchases ---------- */
+const MAX_PHOTOS=5;
+let pform={editId:null,photos:[],vals:{},busy:0};
+/* Bill photos are shrunk in the browser and stored in the same database, one document per photo. */
+const photoCache={};
+async function photoSrc(id){
+  if(photoCache[id]) return photoCache[id];
+  try{const s=await db.doc("photos/"+id).get();if(s.exists){photoCache[id]=s.data().data;return photoCache[id]}}catch(e){}
+  return null;
+}
+function fillPhotos(root){(root||document).querySelectorAll("img[data-pid]").forEach(async im=>{if(im.dataset.done)return;im.dataset.done="1";const s=await photoSrc(im.dataset.pid);if(s)im.src=s;else im.alt="Photo missing"})}
+async function shrink(file){
+  if(!/^image\//.test(file.type)) throw {code:"unsupported_type"};
+  let src;
+  try{src=await createImageBitmap(file,{imageOrientation:"from-image"})}
+  catch(e){src=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(file)})}
+  const w=src.width||src.naturalWidth,h=src.height||src.naturalHeight;
+  for(const [max,qual] of [[1400,.72],[1150,.62],[950,.55],[800,.5]]){
+    const s=Math.min(1,max/Math.max(w,h)),c=document.createElement("canvas");c.width=Math.round(w*s);c.height=Math.round(h*s);
+    const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(src,0,0,c.width,c.height);
+    const url=c.toDataURL("image/jpeg",qual);
+    if(url.length<235000) return url;
+  }
+  throw {code:"too_large"};
+}
+async function addPhotos(files){
+  if(!db){toast("Saving is unavailable here");return}
+  const room=MAX_PHOTOS-pform.photos.length;
+  const list=[...files].slice(0,room);
+  if(files.length>room) toast("Only "+MAX_PHOTOS+" photos per bill. Extra photos were skipped.");
+  for(const f of list){
+    pform.busy++;renderPhotoStrip();
+    try{const data=await shrink(f);const id=uid();await db.doc("photos/"+id).set({shop:state.shop,data,at:Date.now(),by:me().name});photoCache[id]=data;pform.photos.push({id,t:"img"})}
+    catch(e){const c=e&&e.code;toast(c==="too_large"?"That photo is too detailed to store. Try a closer, simpler shot.":c==="unsupported_type"?"Use a photo (JPG or PNG).":c==="quota_exceeded"?"Photo storage is full.":"Could not upload a photo. Try again.")}
+    pform.busy--;renderPhotoStrip();
+  }
+}
+function renderPhotoStrip(){
+  const el=$("#pPhotos");if(!el) return;
+  el.innerHTML=pform.photos.map((ph,i)=>`<div class="thumb"><img data-pid="${ph.id}" data-lb="${i}" alt="Bill photo ${i+1}"><button type="button" class="x" data-rm="${i}" aria-label="Remove photo">×</button></div>`).join("")
+    +(pform.busy?`<div class="thumb">Uploading…</div>`:"")
+    +(pform.photos.length+pform.busy<MAX_PHOTOS?`<label class="thumb add" for="pFile">+ Photo<br>${pform.photos.length}/${MAX_PHOTOS}</label>`:"");
+  fillPhotos(el);
+  el.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{pform.photos.splice(+b.dataset.rm,1);renderPhotoStrip()});
+  el.querySelectorAll("[data-lb]").forEach(im=>im.onclick=()=>openLb(pform.photos,+im.dataset.lb,"New bill"));
+}
+let lbState=null;
+function openLb(photos,i,cap){const imgs=photos.filter(p=>p.t!=="pdf");if(!imgs.length)return;const start=Math.max(0,imgs.indexOf(photos[i]));lbState={imgs,i:start,cap};showLb()}
+function showLb(){const s=lbState;$("#lb").hidden=false;const im=$("#lbImg");im.removeAttribute("src");photoSrc(s.imgs[s.i].id).then(u=>{if(u&&lbState===s)im.src=u});$("#lbCap").textContent=s.cap+" · photo "+(s.i+1)+" of "+s.imgs.length;$("#lbPrev").disabled=s.i===0;$("#lbNext").disabled=s.i===s.imgs.length-1}
+$("#lbClose").onclick=()=>{$("#lb").hidden=true};
+$("#lbPrev").onclick=()=>{if(lbState.i>0){lbState.i--;showLb()}};
+$("#lbNext").onclick=()=>{if(lbState.i<lbState.imgs.length-1){lbState.i++;showLb()}};
+document.addEventListener("keydown",e=>{if($("#lb").hidden)return;if(e.key==="Escape")$("#lb").hidden=true;if(e.key==="ArrowLeft")$("#lbPrev").click();if(e.key==="ArrowRight")$("#lbNext").click()});
+
+const PFIELDS=[["date","Date"],["party","Party"],["billNo","Bill no."],["amount","Amount"],["note","Note"],["photos","Photos"]];
+function diffPurchase(a,b){
+  const out=[];
+  for(const [k,label] of PFIELDS){
+    if(k==="photos"){const x=(a.photos||[]).map(p=>p.id).join(),y=(b.photos||[]).map(p=>p.id).join();if(x!==y)out.push({field:k,label,from:(a.photos||[]).length,to:(b.photos||[]).length});continue}
+    const x=k==="amount"?num(a[k]):String(a[k]||""),y=k==="amount"?num(b[k]):String(b[k]||"");
+    if(x!==y) out.push({field:k,label,from:x,to:y});
+  }
+  return out;
+}
+function fmtChange(c){
+  const f=v=>c.field==="amount"?rs(v):c.field==="date"?niceDate(v):c.field==="photos"?v+" photo"+(v===1?"":"s"):(v||"(blank)");
+  const key=c.field==="amount"||c.field==="date";
+  return `<div class="chg">${key?"<strong>":""}${esc(c.label)}${key?"</strong>":""}: <span class="old">${esc(f(c.from))}</span> → <b>${esc(f(c.to))}</b></div>`;
+}
+function renderDlParties(){
+  const n=new Set();txnsBetween(state.shop,"0000","9999","party").forEach(x=>x.name&&n.add(x.name));allPurchases(state.shop).forEach(x=>x.party&&n.add(x.party));
+  $("#dl-partyall").innerHTML=[...n].sort().map(v=>`<option value="${esc(v)}">`).join("");
+}
+
+/* Party accounts: every bill adds to what we owe the party, every party payment reduces it.
+   A payment can settle chosen bills (settles = {billId: amount}); the rest stays "on account". */
+let partyDocs={};
+/* settles is stored as a list [{b:billId,a:amount}] so edits replace it whole */
+const settleList=t=>Array.isArray(t.settles)?t.settles.map(x=>[x.b,num(x.a)]):Object.entries(t.settles||{}).map(([b,a])=>[b,num(a)]);
+const pkey=s=>String(s||"").trim().toLowerCase().replace(/\s+/g," ");
+function partyBook(shop){
+  const map={};
+  const get=name=>{const k=pkey(name);return map[k]||(map[k]={key:k,name:String(name).trim(),bills:[],pays:[],opening:0,openingDate:"",phone:"",docId:null})};
+  const bills=allPurchases(shop),srs=billSerials(bills);
+  bills.forEach(b=>{if(b.party)get(b.party).bills.push({...b,sr:srs[b.id]})});
+  txnsBetween(shop,"0000","9999","party").forEach(t=>{if(t.name)get(t.name).pays.push(t)});
+  Object.entries(partyDocs).forEach(([id,d])=>{if(d.shop!==shop||d.deleted)return;const r=get(d.name);r.name=d.name;r.opening=num(d.opening);r.openingDate=d.openingDate||"";r.phone=d.phone||"";r.docId=id});
+  for(const r of Object.values(map)){
+    const paidTo={};let linked=0;
+    r.pays.forEach(t=>{for(const [id,a] of settleList(t)){paidTo[id]=r2((paidTo[id]||0)+a);linked+=a}});
+    r.bills.forEach(b=>{b.paid=Math.min(num(b.amount),paidTo[b.id]||0);b.due=r2(num(b.amount)-b.paid);b.status=b.due<=0?"Paid":b.paid>0?"Part paid":"Unpaid"});
+    r.totalBills=r2(r.bills.reduce((a,b)=>a+num(b.amount),0));
+    r.totalPaid=r2(r.pays.reduce((a,t)=>a+num(t.amount),0));
+    r.balance=r2(r.opening+r.totalBills-r.totalPaid);
+    r.onAccount=r2(r.totalPaid-linked);
+    r.openBills=r.bills.filter(b=>b.due>0).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.sr-b.sr));
+  }
+  return map;
+}
+function billSerials(bills){
+  const out={};let max=0;
+  bills.forEach(b=>{if(b.sr){out[b.id]=b.sr;max=Math.max(max,b.sr)}});
+  bills.filter(b=>!b.sr).sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1)).forEach(b=>{out[b.id]=++max});
+  return out;
+}
+function statusPill(b){return `<span class="pill${b.status==="Paid"?" ok":b.status==="Part paid"?" warn":""}">${b.status}</span>`}
+let payForm={party:null,alloc:{},vals:{}};
+
+function renderPurchases(){
+  const p=$("#panel"),owner=isOwnerU(),shop=state.shop;
+  renderDlParties();
+  state.psub=state.psub||"register";
+  const all=allPurchases(shop),pending=owner?all.filter(x=>x.reviewPending):[];
+  p.innerHTML=`${pending.length?`<div class="alert"><h2>Changed by shop manager · ${pending.length} bill${pending.length>1?"s":""} to check</h2>
+    ${pending.map(x=>{const h=(x.history||[]).filter(e=>e.role==="manager"&&e.at>(x.reviewedAt||0));return `<div class="card" style="padding:12px">
+      <div class="card-head" style="margin-bottom:6px"><span><b>${esc(x.party)}</b> · bill ${esc(x.billNo||"—")} · <span class="num">${rs(x.amount)}</span></span><span class="actions"><button class="link" data-pview="${x.id}">View</button><button class="btn small" data-seen="${x.id}">Mark checked</button></span></div>
+      ${h.map(e=>`<div class="muted small">${esc(e.by)} · ${esc(new Date(e.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}))}</div>${e.changes.map(fmtChange).join("")}`).join("")}</div>`}).join("")}
+  </div>`:""}
+  <div class="seg" role="tablist" aria-label="Purchases view" style="justify-self:start"><button data-psub="register" aria-pressed="${state.psub==="register"}">Bill register</button><button data-psub="parties" aria-pressed="${state.psub==="parties"}">Party accounts</button></div>
+  <div id="psubPanel" class="panel" style="padding-top:0"></div>`;
+  p.querySelectorAll("[data-psub]").forEach(b=>b.onclick=()=>{state.psub=b.dataset.psub;render()});
+  p.querySelectorAll("[data-seen]").forEach(b=>b.onclick=()=>{const x=all.find(i=>i.id===b.dataset.seen);updatePurchase(x,{reviewPending:false,reviewedAt:Date.now()},"Marked as checked")});
+  p.querySelectorAll("[data-pview]").forEach(b=>b.onclick=()=>{const x=all.find(i=>i.id===b.dataset.pview);const {from,to}=state;if(x.date<from||x.date>to){state.unit="month";const y=+x.date.slice(0,4),m=+x.date.slice(5,7);state.from=x.date.slice(0,8)+"01";state.to=x.date.slice(0,8)+pad(lastDay(y,m));state.preset=matchPreset()}state.psub="register";state.purq=x.billNo||x.party;render()});
+  (state.psub==="parties"?renderPartyAccounts:renderBillRegister)($("#psubPanel"));
+}
+
+/* ----- Bill register ----- */
+function renderBillRegister(p){
+  const owner=isOwnerU(),{from,to}=state,shop=state.shop;
+  const all=allPurchases(shop),book=partyBook(shop),srs=billSerials(all);
+  const billInfo={};Object.values(book).forEach(r=>r.bills.forEach(b=>billInfo[b.id]=b));
+  const editing=pform.editId?all.find(x=>x.id===pform.editId):null;
+  if(pform.editId&&!editing) pform={editId:null,photos:[],vals:{},busy:0};
+  const v=pform.vals,val=(k,d="")=>esc(hasVal(v[k])?v[k]:editing&&hasVal(editing[k])?editing[k]:d);
+  const q=(state.purq||"").toLowerCase(),sf=state.pstat||"all";
+  let list=all.filter(x=>x.date>=from&&x.date<=to).map(x=>({...x,...(billInfo[x.id]||{}),sr:srs[x.id]})).sort((a,b)=>b.sr-a.sr);
+  if(q) list=list.filter(x=>[x.party,x.billNo,x.note,String(x.amount),x.by,String(x.sr)].some(s=>String(s||"").toLowerCase().includes(q)));
+  if(sf!=="all") list=list.filter(x=>sf==="due"?x.due>0:x.status===sf);
+  const sum=k=>r2(list.reduce((a,x)=>a+num(x[k]),0));
+  const defDate=todayStr()>=from&&todayStr()<=to?todayStr():to;
+  const nextSr=Math.max(0,...Object.values(srs))+1;
+  p.innerHTML=`<div class="cols">
+    <div class="card"><div class="card-head"><h2>${editing?"Edit bill · Sr "+srs[editing.id]:"Add purchase bill"}</h2>${editing?'<button class="link" id="pCancel">Cancel edit</button>':`<span class="pill">Sr no. ${nextSr}</span>`}</div>
+      <form class="f" id="pForm" autocomplete="off">
+        <div class="row2"><label class="fl">Bill date<input type="date" id="p_date" value="${val("date",defDate)}" required></label>${field("p_amount","Bill amount",hasVal(v.amount)?v.amount:editing?editing.amount:"","required")}</div>
+        <label class="fl">Party / supplier<input type="text" id="p_party" list="dl-partyall" required value="${val("party")}"></label>
+        <div class="row2"><label class="fl">Party bill no.<input type="text" id="p_billNo" value="${val("billNo")}" placeholder="Optional"></label><label class="fl">Note<input type="text" id="p_note" value="${val("note")}" placeholder="Optional"></label></div>
+        <div class="fl" style="font-size:12px;color:var(--muted)">Bill photos (up to ${MAX_PHOTOS})
+          <div class="thumbs" id="pPhotos"></div>
+          <input type="file" id="pFile" accept="image/*" multiple hidden>
+        </div>
+        <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>${editing?"Save changes":"Save bill"}</button></div>
+        ${editing&&!owner?`<p class="muted small" style="margin:0">Changes you make are shown to the owner.</p>`:""}
+      </form>
+    </div>
+    <div class="card"><div class="card-head"><h2>Bill register · ${esc(periodLabel())}</h2></div>
+      <div class="tools">
+        <input type="search" id="p_q" placeholder="Search Sr no., party, bill no., amount" value="${esc(state.purq||"")}">
+        <select id="p_stat" aria-label="Status"><option value="all">All bills</option><option value="due"${sf==="due"?" selected":""}>Not fully paid</option><option value="Unpaid"${sf==="Unpaid"?" selected":""}>Unpaid</option><option value="Part paid"${sf==="Part paid"?" selected":""}>Part paid</option><option value="Paid"${sf==="Paid"?" selected":""}>Paid</option></select>
+      </div>
+      <div class="chips" style="margin-bottom:12px"><span class="chip">${list.length} bill${list.length===1?"":"s"}</span><span class="chip">Bills <b>${rs(sum("amount"))}</b></span><span class="chip">Paid <b>${rs(sum("paid"))}</b></span><span class="chip">Due <b>${rs(sum("due"))}</b></span></div>
+      ${list.length?`<div class="tbl-wrap"><table><thead><tr><th class="r">Sr</th><th>Date</th><th>Party</th><th>Bill no.</th><th class="r">Amount</th><th class="r">Paid</th><th class="r">Due</th><th>Status</th><th>Photos</th><th>Entered by</th><th></th></tr></thead><tbody>
+      ${list.map(x=>{const ph=x.photos||[],edits=(x.history||[]).length;return `<tr${x.id===pform.editId?' style="background:var(--accent-soft)"':""}><td class="num r">${x.sr}</td><td>${esc(shortDate(x.date))}</td><td><button class="link" style="padding:0;color:var(--ink)" data-popen="${esc(pkey(x.party))}">${esc(x.party)}</button>${x.note?`<div class="muted small">${esc(x.note)}</div>`:""}</td><td>${esc(x.billNo||"")}</td>
+        <td class="num r">${rs(x.amount)}</td><td class="num r">${rs(x.paid)}</td><td class="num r">${rs(x.due)}</td><td>${statusPill(x)}</td>
+        <td><div class="mini">${ph.map((f,i)=>`<img data-pid="${f.id}" data-plb="${x.id}" data-i="${i}" alt="Bill photo ${i+1}">`).join("")||'<span class="muted small">—</span>'}</div></td>
+        <td class="small">${esc(x.by||"")}${edits?`<details><summary class="pill${x.reviewPending?" warn":""}">edited ${edits}×</summary>${(x.history||[]).map(e=>`<div class="muted small" style="margin-top:4px">${esc(e.by)} · ${esc(new Date(e.at).toLocaleDateString("en-IN",{day:"numeric",month:"short"}))}</div>${e.changes.map(fmtChange).join("")}`).join("")}</details>`:""}</td>
+        <td>${x.due>0?`<button class="btn small" data-settle="${x.id}">Settle</button>`:""}<button class="link" data-pedit="${x.id}">Edit</button>${owner?`<span class="dw"><button class="link del" data-pdel="${x.id}">Delete</button></span>`:""}</td></tr>`}).join("")}
+      <tr class="total"><td></td><td colspan="3">Total</td><td class="num r">${rs(sum("amount"))}</td><td class="num r">${rs(sum("paid"))}</td><td class="num r">${rs(sum("due"))}</td><td colspan="4"></td></tr></tbody></table></div>`:`<p class="empty">No purchase bills for ${esc(periodLabel())}${q||sf!=="all"?" match these filters":""}.</p>`}
+    </div>
+  </div>`;
+  renderPhotoStrip();fillPhotos(p);
+  const fileIn=$("#pFile");fileIn.onchange=async()=>{const fs=[...fileIn.files];fileIn.value="";await addPhotos(fs)};
+  const form=$("#pForm");
+  form.addEventListener("input",e=>{const id=e.target.id;if(id&&id.startsWith("p_")&&id!=="p_q")pform.vals[id.slice(2)]=e.target.value});
+  const pc=$("#pCancel");if(pc) pc.onclick=()=>{pform={editId:null,photos:[],vals:{},busy:0};render()};
+  form.onsubmit=async e=>{e.preventDefault();
+    if(pform.busy){toast("Wait for photos to finish uploading");return}
+    const amt=num($("#p_amount").value);if(amt<=0){toast("Enter the bill amount");return}
+    const entry={date:$("#p_date").value,party:$("#p_party").value.trim(),billNo:$("#p_billNo").value.trim(),amount:amt,note:$("#p_note").value.trim(),photos:pform.photos.map(x=>({...x}))};
+    if(!entry.party){toast("Enter the party name");return}
+    let ok;
+    if(editing){
+      const changes=diffPurchase(editing,entry);
+      if(!changes.length){toast("Nothing changed");return}
+      const role=owner?"owner":"manager";
+      const history=[...(editing.history||[]),{at:Date.now(),by:me().name,role,changes}];
+      Object.assign(entry,{sr:srs[editing.id],by:editing.by,at:editing.at,history,reviewPending:owner?false:true,reviewedAt:owner?Date.now():(editing.reviewedAt||0)});
+      ok=await savePurchase(entry,editing.id,editing.date,owner?"Bill updated":"Bill updated. The owner will see your changes.");
+    }else{
+      Object.assign(entry,{sr:nextSr,by:me().name,at:Date.now(),history:[],reviewPending:false});
+      ok=await savePurchase(entry,null,null,"Bill Sr "+nextSr+" saved");
+    }
+    if(ok){pform={editId:null,photos:[],vals:{},busy:0};render()}
+  };
+  let qt;$("#p_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{state.purq=e.target.value.trim();render();const s=$("#p_q");s.focus();s.setSelectionRange(s.value.length,s.value.length)},250)};
+  $("#p_stat").onchange=e=>{state.pstat=e.target.value;render()};
+  p.querySelectorAll("[data-pedit]").forEach(b=>b.onclick=()=>{const x=all.find(i=>i.id===b.dataset.pedit);pform={editId:x.id,photos:(x.photos||[]).map(f=>({...f})),vals:{},busy:0};render();window.scrollTo({top:0,behavior:"smooth"})});
+  p.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{const x=all.find(i=>i.id===b.dataset.pdel);confirmInline(b.parentElement,()=>updatePurchase(x,{deleted:true},"Bill removed"))});
+  p.querySelectorAll("[data-plb]").forEach(im=>im.onclick=()=>{const x=all.find(i=>i.id===im.dataset.plb);openLb(x.photos||[],+im.dataset.i,x.party+(x.billNo?" · bill "+x.billNo:""))});
+  p.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{state.psub="parties";state.party=b.dataset.popen;render();window.scrollTo({top:0})});
+  p.querySelectorAll("[data-settle]").forEach(b=>b.onclick=()=>{const x=list.find(i=>i.id===b.dataset.settle);startSettle(pkey(x.party),[x.id])});
+}
+function startSettle(key,billIds){
+  const r=partyBook(state.shop)[key];if(!r)return;
+  const alloc={};let amt=0;
+  billIds.forEach(id=>{const b=r.bills.find(x=>x.id===id);if(b&&b.due>0){alloc[id]=b.due;amt+=b.due}});
+  payForm={party:key,alloc,vals:{amount:r2(amt)},open:true};
+  state.psub="parties";state.party=key;render();
+  setTimeout(()=>{const f=$("#payForm");if(f)f.scrollIntoView({behavior:"smooth",block:"start"})},50);
+}
+
+/* ----- Party accounts (khata) ----- */
+function renderPartyAccounts(p){
+  const owner=isOwnerU(),shop=state.shop,book=partyBook(shop);
+  const q=(state.partyq||"").toLowerCase();
+  let parties=Object.values(book).sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name));
+  const totalDue=r2(parties.reduce((a,r)=>a+Math.max(0,r.balance),0));
+  if(q) parties=parties.filter(r=>r.name.toLowerCase().includes(q)||r.phone.includes(q));
+  const sel=book[state.party]||null;
+  p.innerHTML=`<div class="cols">
+    <div class="card"><div class="card-head"><h2>Parties</h2><button class="btn ghost small" id="newParty">+ New party</button></div>
+      <div class="chips" style="margin-bottom:10px"><span class="chip">Total to pay <b>${rs(totalDue)}</b></span><span class="chip">${Object.keys(book).length} part${Object.keys(book).length===1?"y":"ies"}</span></div>
+      <div class="tools"><input type="search" id="pa_q" placeholder="Search party" value="${esc(state.partyq||"")}"></div>
+      <form class="f" id="npForm" hidden autocomplete="off" style="margin-bottom:12px">
+        <label class="fl">Party name<input type="text" id="np_name" required></label>
+        <div class="row2">${field("np_open","Old balance to pay (optional)","")}<label class="fl">Phone<input type="text" id="np_phone" inputmode="tel" placeholder="Optional"></label></div>
+        <div class="actions"><button class="btn small" type="submit">Add party</button><button class="link" type="button" id="npCancel">Cancel</button></div>
+      </form>
+      ${parties.length?`<div class="userpick">${parties.map(r=>`<button type="button" data-party="${esc(r.key)}" aria-pressed="${sel&&sel.key===r.key}"><span><b>${esc(r.name)}</b><br><span class="role">${r.bills.length} bill${r.bills.length===1?"":"s"}${r.openBills.length?" · "+r.openBills.length+" open":""}</span></span><span class="num" style="text-align:right">${r.balance>0?`<span style="color:var(--bad)">${rs(r.balance)}</span><br><span class="role">to pay</span>`:r.balance<0?`<span style="color:var(--good)">${rs(-r.balance)}</span><br><span class="role">advance</span>`:`<span class="role">Settled</span>`}</span></button>`).join("")}</div>`:`<p class="empty">No parties yet. Add a purchase bill or a new party.</p>`}
+    </div>
+    <div class="card" id="partyCard">${sel?partyLedgerHtml(sel,owner):`<p class="empty">Pick a party to see its account: every bill, every payment and the balance to pay.</p>`}</div>
+  </div>`;
+  let qt;$("#pa_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{state.partyq=e.target.value.trim();render();const s=$("#pa_q");s.focus();s.setSelectionRange(s.value.length,s.value.length)},250)};
+  p.querySelectorAll("[data-party]").forEach(b=>b.onclick=()=>{state.party=b.dataset.party;if(payForm.party!==state.party)payForm={party:null,alloc:{},vals:{}};render()});
+  const np=$("#npForm");
+  $("#newParty").onclick=()=>{np.hidden=false;$("#np_name").focus()};
+  $("#npCancel").onclick=()=>{np.hidden=true};
+  np.onsubmit=async e=>{e.preventDefault();const name=$("#np_name").value.trim();if(!name)return;
+    const k=pkey(name);if(book[k]&&book[k].docId){toast("This party already exists");return}
+    const ok=await write(()=>db.doc("parties/"+shop+"_"+slug(name)+"-"+uid().slice(-4)).set({shop,name,opening:num($("#np_open").value),openingDate:todayStr(),phone:$("#np_phone").value.trim(),by:me().name,at:Date.now()}),"Party added");
+    if(ok){state.party=k;render()}};
+  if(sel) wirePartyLedger(sel,owner);
+}
+
+function partyLedgerHtml(r,owner){
+  const rows=[];
+  r.bills.forEach(b=>rows.push({date:b.date,at:b.at||0,kind:"bill",b}));
+  r.pays.forEach(t=>rows.push({date:t.date,at:t.at||0,kind:"pay",t}));
+  rows.sort((a,b)=>a.date===b.date?a.at-b.at:(a.date<b.date?-1:1));
+  let bal=r.opening;
+  const srOf={};r.bills.forEach(b=>srOf[b.id]=b);
+  const lines=rows.map(x=>{
+    if(x.kind==="bill"){bal=r2(bal+num(x.b.amount));return `<tr><td>${esc(shortDate(x.date))}</td><td>Bill · Sr ${x.b.sr}${x.b.billNo?" · no. "+esc(x.b.billNo):""} ${statusPill(x.b)}${x.b.due>0?` <button class="link" data-settle1="${x.b.id}">settle</button>`:""}</td><td class="num r">${rs(x.b.amount)}</td><td></td><td class="num r bal">${rs(bal)}</td></tr>`}
+    const t=x.t,links=settleList(t).map(([id])=>srOf[id]?"Sr "+srOf[id].sr:null).filter(Boolean);
+    bal=r2(bal-num(t.amount));
+    return `<tr><td>${esc(shortDate(x.date))}</td><td>Paid · ${esc(t.mode)}${links.length?" · settles "+links.join(", "):" · on account"}${t.note?` <span class="muted">(${esc(t.note)})</span>`:""}${t.by?` <span class="muted small">by ${esc(t.by)}</span>`:""}${owner?` <button class="link" data-payedit="${t.id}">edit</button>`:""}</td><td></td><td class="num r">${rs(t.amount)}</td><td class="num r bal">${rs(bal)}</td></tr>`;
+  });
+  const pf=payForm.party===r.key?payForm:{alloc:{},vals:{}};
+  const defDate=todayStr();
+  return `<div class="card-head"><div><h2>${esc(r.name)}</h2>${r.phone?`<span class="muted small">${esc(r.phone)}</span>`:""}</div>
+      <div style="text-align:right"><div class="num" style="font-size:22px;color:${r.balance>0?"var(--bad)":"var(--good)"}">${rs(Math.abs(r.balance))}</div><div class="muted small">${r.balance>0?"You have to pay":r.balance<0?"Advance paid":"Fully settled"}</div></div></div>
+    <div class="chips" style="margin-bottom:12px"><span class="chip">Bills <b>${rs(r.totalBills)}</b></span><span class="chip">Paid <b>${rs(r.totalPaid)}</b></span>${r.opening?`<span class="chip">Old balance <b>${rs(r.opening)}</b></span>`:""}${r.onAccount>0?`<span class="chip">On account (not linked to a bill) <b>${rs(r.onAccount)}</b></span>`:""}
+      ${owner?`<button class="link" id="editParty">Edit party</button>`:""}</div>
+    <form class="f" id="epForm" hidden autocomplete="off" style="margin-bottom:12px">
+      <div class="row2">${field("ep_open","Old balance to pay",r.opening)}<label class="fl">Phone<input type="text" id="ep_phone" value="${esc(r.phone)}"></label></div>
+      <div class="actions"><button class="btn small" type="submit">Save party</button><button class="link" type="button" id="epCancel">Cancel</button></div>
+    </form>
+    <div class="actions" style="margin-bottom:12px"><button class="btn" id="payToggle">${pf.open?"Hide payment form":"Record payment"}</button>${r.openBills.length?`<button class="btn ghost small" id="settleAll">Settle all open bills (${rs(r.openBills.reduce((a,b)=>a+b.due,0))})</button>`:""}</div>
+    <form class="f card" id="payForm" ${pf.open?"":"hidden"} autocomplete="off" style="background:var(--soft);border:0">
+      <div class="row2"><label class="fl">Date<input type="date" id="pf_date" value="${esc(pf.vals.date||defDate)}" required></label>${field("pf_amount","Amount paid",pf.vals.amount??"","required")}</div>
+      <div class="row2"><label class="fl">Paid by<select id="pf_mode">${MODES.map(m=>`<option${pf.vals.mode===m?" selected":""}>${m}</option>`).join("")}</select></label><label class="fl">Note<input type="text" id="pf_note" value="${esc(pf.vals.note||"")}" placeholder="Cheque no., UTR, etc."></label></div>
+      ${r.openBills.length?`<fieldset><legend>Settle these bills</legend>
+        <div class="actions" style="margin-bottom:6px"><button class="btn ghost small" type="button" id="pfAuto">Fill oldest bills first</button><button class="link" type="button" id="pfClear">Clear</button></div>
+        <div class="tbl-wrap"><table><thead><tr><th></th><th>Bill</th><th class="r">Due</th><th class="r">Pay now</th></tr></thead><tbody>
+        ${r.openBills.map(b=>`<tr><td><input type="checkbox" class="pfchk" data-bid="${b.id}"${pf.alloc[b.id]?" checked":""} aria-label="Settle Sr ${b.sr}"></td><td>Sr ${b.sr} · ${esc(shortDate(b.date))}${b.billNo?" · "+esc(b.billNo):""}</td><td class="num r">${rs(b.due)}</td><td class="r"><input class="amt pfamt" type="number" step="0.01" min="0" inputmode="decimal" data-bid="${b.id}" value="${pf.alloc[b.id]?esc(pf.alloc[b.id]):""}" style="width:110px"></td></tr>`).join("")}
+        </tbody></table></div></fieldset>`:""}
+      <div class="check" id="pfCheck"></div>
+      <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>Save payment</button></div>
+      <p class="muted small" style="margin:0">The payment is also added to Payments → Party paid, so the galla cash or UPI / bank balance goes down.</p>
+    </form>
+    <h3 style="margin:14px 0 8px;font-size:14px">Party ledger</h3>
+    <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Details</th><th class="r">Bill (+)</th><th class="r">Paid (−)</th><th class="r bal">Balance</th></tr></thead><tbody>
+      <tr class="bf"><td></td><td>Old balance</td><td class="num r">${r.opening?rs(r.opening):""}</td><td></td><td class="num r bal">${rs(r.opening)}</td></tr>
+      ${lines.join("")}
+      <tr class="total"><td></td><td>Total</td><td class="num r">${rs(r.opening+r.totalBills)}</td><td class="num r">${rs(r.totalPaid)}</td><td class="num r bal">${rs(r.balance)}</td></tr>
+    </tbody></table></div>`;
+}
+
+function wirePartyLedger(r,owner){
+  const c=$("#partyCard");
+  if(payForm.party!==r.key) payForm={party:r.key,alloc:{},vals:{},open:false};
+  const form=$("#payForm");
+  const readAlloc=()=>{const a={};c.querySelectorAll(".pfamt").forEach(i=>{const v=num(i.value);if(v>0)a[i.dataset.bid]=v});return a};
+  const check=()=>{
+    payForm.vals={date:$("#pf_date").value,amount:$("#pf_amount").value,mode:$("#pf_mode").value,note:$("#pf_note").value};
+    payForm.alloc=readAlloc();
+    const amt=num($("#pf_amount").value),linked=r2(Object.values(payForm.alloc).reduce((a,b)=>a+b,0)),el=$("#pfCheck");
+    let over=r.openBills.find(b=>(payForm.alloc[b.id]||0)>b.due+0.001);
+    if(over){el.className="check off";el.textContent="Sr "+over.sr+" only has "+rs(over.due)+" due.";return false}
+    if(!amt){el.className="check";el.textContent=r.openBills.length?"Enter the amount, then tick the bills it pays.":"Enter the amount paid.";return false}
+    if(linked>amt){el.className="check off";el.textContent="Bills ticked add up to "+rs(linked)+", more than the "+rs(amt)+" paid.";return false}
+    const left=r2(amt-linked);
+    el.className="check ok";el.textContent=(linked?"Settles "+rs(linked)+" of bills. ":"")+(left?rs(left)+" goes on account. ":"")+"New balance: "+rs(r.balance-amt)+".";
+    return true;
+  };
+  $("#payToggle").onclick=()=>{payForm.open=!payForm.open;render()};
+  const sa=$("#settleAll");if(sa) sa.onclick=()=>startSettle(r.key,r.openBills.map(b=>b.id));
+  c.querySelectorAll("[data-settle1]").forEach(b=>b.onclick=()=>startSettle(r.key,[b.dataset.settle1]));
+  if(form){
+    form.addEventListener("input",e=>{
+      if(e.target.classList.contains("pfamt")){const ch=c.querySelector(`.pfchk[data-bid="${e.target.dataset.bid}"]`);if(ch)ch.checked=num(e.target.value)>0}
+      if(e.target.classList.contains("pfchk")){const am=c.querySelector(`.pfamt[data-bid="${e.target.dataset.bid}"]`);const b=r.openBills.find(x=>x.id===e.target.dataset.bid);am.value=e.target.checked?b.due:""}
+      check()});
+    form.addEventListener("change",check);
+    const auto=$("#pfAuto");if(auto) auto.onclick=()=>{let left=num($("#pf_amount").value);
+      if(!left){left=r2(r.openBills.reduce((a,b)=>a+b.due,0));$("#pf_amount").value=left}
+      c.querySelectorAll(".pfamt").forEach(i=>{const b=r.openBills.find(x=>x.id===i.dataset.bid),pay=Math.min(b.due,left);i.value=pay>0?r2(pay):"";left=r2(left-pay);c.querySelector(`.pfchk[data-bid="${b.id}"]`).checked=pay>0});check()};
+    const clr=$("#pfClear");if(clr) clr.onclick=()=>{c.querySelectorAll(".pfamt").forEach(i=>i.value="");c.querySelectorAll(".pfchk").forEach(i=>i.checked=false);check()};
+    check();
+    form.onsubmit=async e=>{e.preventDefault();
+      if(!check()){toast("Check the payment amounts");return}
+      const amt=num($("#pf_amount").value),settles=payForm.alloc;
+      const srs=Object.keys(settles).map(id=>"Sr "+r.bills.find(b=>b.id===id).sr);
+      const entry={type:"party",date:$("#pf_date").value,amount:amt,name:r.name,mode:$("#pf_mode").value,note:$("#pf_note").value.trim(),sub:srs.join(", "),settles:Object.entries(settles).map(([b,a])=>({b,a})),by:me().name};
+      if(await saveTxn(entry)){payForm={party:r.key,alloc:{},vals:{},open:false};render()}
+    };
+  }
+  c.querySelectorAll("[data-payedit]").forEach(b=>b.onclick=()=>{state.tab="payments";state.pay.editId=b.dataset.payedit;render();window.scrollTo({top:0})});
+  const ep=$("#epForm"),eb=$("#editParty");
+  if(eb){eb.onclick=()=>{ep.hidden=false};$("#epCancel").onclick=()=>{ep.hidden=true};
+    ep.onsubmit=async e=>{e.preventDefault();
+      const data={shop:state.shop,name:r.name,opening:num($("#ep_open").value),openingDate:r.openingDate||todayStr(),phone:$("#ep_phone").value.trim(),at:Date.now(),by:me().name};
+      const id=r.docId||(state.shop+"_"+slug(r.name)+"-"+uid().slice(-4));
+      await write(()=>db.doc("parties/"+id).set(data),"Party saved");}}
+}
+
+/* ---------- Accounts ---------- */
+function renderAccounts(){
+  const p=$("#panel"),shop=state.shop,pos=posOn(),{from,to}=state,af=state.af;
+  const span=daysBetween(from,to)+1;
+  const group=af.group==="auto"?(span>62?"month":"day"):af.group;
+  let rows=[];
+  if(group==="month"){
+    let d=parse(from);d.setDate(1);
+    while(fmtD(d)<=to){const y=d.getFullYear(),m=d.getMonth()+1,s=`${y}-${pad(m)}-01`,e=`${y}-${pad(m)}-${pad(lastDay(y,m))}`;
+      const a=s<from?from:s,b=e>to?to:e,t=totals(shop,a,b);
+      const iss=salesBetween(shop,a,b).filter(x=>issuesOf(x).length).length;
+      if(t.days||t.out)rows.push({key:`${y}-${pad(m)}`,label:MON[m-1]+" "+y,end:b,t,iss:iss?[iss+" day"+(iss>1?"s":"")+" need checking"]:[],reading:null});
+      d.setMonth(d.getMonth()+1)}
+  }else{
+    const sm=Object.fromEntries(salesBetween(shop,from,to).map(s=>[s.date,s]));
+    const dates=new Set(Object.keys(sm));txnsBetween(shop,from,to).forEach(x=>dates.add(x.date));
+    [...dates].sort().forEach(d=>{const s=sm[d];const iss=s?issuesOf(s):(pos?["No sales entry"]:[]);
+      rows.push({key:d,label:shortDate(d),end:d,t:totals(shop,d,d),iss,reading:s&&hasVal(s.posReading)?num(s.posReading):null})});
+  }
+  const shown=af.issues?rows.filter(r=>r.iss.length):rows;
+  const T=totals(shop,from,to),bal=d=>({cash:cashInHand(shop,d),bank:bankBalance(shop,d),due:outstanding(shop,d)});
+  const o=bal(addDays(from,-1)),c=bal(to),f=v=>v==null?"—":rs(v);
+  const issueCount=rows.filter(r=>r.iss.length).length;
+  const showPos=pos&&group==="day";
+  p.innerHTML=`<div class="card">
+    <div class="card-head"><h2>Accounts · ${esc(periodLabel())}</h2><button class="btn ghost small" id="csv">Download CSV</button></div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Group by"><button data-g="day" aria-pressed="${group==="day"}">Day-wise</button><button data-g="month" aria-pressed="${group==="month"}">Month-wise</button></div>
+      <label class="tick"><input type="checkbox" id="onlyIss"${af.issues?" checked":""}> Only ${group==="day"?"days":"months"} that need checking${issueCount?` <span class="pill warn">${issueCount}</span>`:""}</label>
+    </div>
+    ${shown.length?`<div class="tbl-wrap"><table><thead><tr><th>${group==="day"?"Date":"Month"}</th>${showPos?'<th class="r">POS reading</th>':""}<th class="r">Net sale</th><th class="r">Cash</th><th class="r">UPI</th><th class="r">Unpaid</th><th class="r">Return</th><th class="r">Dues recd.</th><th class="r">Expense</th><th class="r">Salary</th><th class="r">Party</th><th class="r bal">Galla cash</th><th class="r bal">UPI / bank</th><th class="r bal">Unpaid due</th><th>Check</th></tr></thead><tbody>
+    <tr class="bf"><td>Brought forward</td>${showPos?"<td></td>":""}<td colspan="9"></td><td class="num r bal">${f(o.cash)}</td><td class="num r bal">${f(o.bank)}</td><td class="num r bal">${rs(o.due)}</td><td></td></tr>
+    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading)}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
+    ${af.issues?"":`<tr class="total"><td>Total</td>${showPos?"<td></td>":""}<td class="num r">${rs(T.net)}</td><td class="num r">${rs(T.cash)}</td><td class="num r">${rs(T.upi)}</td><td class="num r">${rs(T.unpaid+T.openUnpaid)}</td><td class="num r">${rs(T.ret)}</td><td class="num r">${rs(T.dues)}</td><td class="num r">${rs(T.expense)}</td><td class="num r">${rs(T.salary)}</td><td class="num r">${rs(T.party)}</td><td class="num r bal">${f(c.cash)}</td><td class="num r bal">${f(c.bank)}</td><td class="num r bal">${rs(c.due)}</td><td></td></tr>`}
+    </tbody></table></div>
+    <p class="muted small" style="margin:10px 0 0">Tap a ${group==="day"?"day to open its entry":"month to see its days"}. Balances carry forward from the row above.</p>`:`<p class="empty">${af.issues?"Nothing needs checking in "+esc(periodLabel())+".":"No entries for "+esc(periodLabel())+" yet."}</p>`}
+  </div>
+  <div class="card"><h2 style="margin-bottom:10px">Money in and out · ${esc(periodLabel())}</h2><div class="chips">
+    <span class="chip">Net sale <b>${rs(T.net)}</b></span><span class="chip">Expenses <b>${rs(T.expense)}</b></span><span class="chip">Salary <b>${rs(T.salary)}</b></span>
+    <span class="chip">Party paid <b>${rs(T.party)}</b></span><span class="chip">Sale − expenses − salary <b>${rs(T.net-T.expense-T.salary)}</b></span>
+  </div><p class="muted small" style="margin:10px 0 0">Party payments buy stock, so they are shown separately and not counted as a cost here.</p></div>`;
+  p.querySelectorAll(".seg button[data-g]").forEach(b=>b.onclick=()=>{af.group=b.dataset.g;render()});
+  $("#onlyIss").onchange=e=>{af.issues=e.target.checked;render()};
+  p.querySelectorAll("tr.click").forEach(tr=>tr.onclick=()=>{const k=tr.dataset.key;
+    if(k.length===10){state.entryDate=k;state.tab="entry"}else{const y=+k.slice(0,4),m=+k.slice(5);state.unit="month";state.from=`${k}-01`;state.to=`${k}-${pad(lastDay(y,m))}`;state.preset=matchPreset();af.group="day"}render();window.scrollTo({top:0})});
+  $("#csv").onclick=()=>exportCsv(from,to);
+}
+
+async function exportCsv(from,to){
+  const shopName=(curShop()||{}).name||"shop";
+  const q=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const lines=[["Date","Kind","Name / category","Detail","Paid by","POS reading","Total sale","Return","Net sale","Cash","UPI","Unpaid","Dues cash","Dues UPI","Payment amount","Galla cash","UPI / bank","Unpaid due","Note"].join(",")];
+  const dates=new Set();salesBetween(state.shop,from,to).forEach(s=>dates.add(s.date));txnsBetween(state.shop,from,to).forEach(x=>dates.add(x.date));
+  for(const d of [...dates].sort()){
+    const s=salesBetween(state.shop,d,d)[0];
+    if(s) lines.push([d,"Sales","","","",s.posReading,s.total,s.ret,r2(num(s.total)-num(s.ret)),s.cash,s.upi,s.unpaid,s.duesCash,s.duesUpi,"","","","",s.note].map(q).join(","));
+    for(const x of txnsBetween(state.shop,d,d)) lines.push([d,TYPE[x.type].label,x.name,x.sub,x.mode,"","","","","","","","","",x.amount,"","","",x.note].map(q).join(","));
+    lines.push([d,"Closing balance","","","","","","","","","","","","","",cashInHand(state.shop,d),bankBalance(state.shop,d),outstanding(state.shop,d),""].map(q).join(","));
+  }
+  saveFile(`${slug(shopName)}-cashbook-${from}-to-${to}.csv`,"\ufeff"+lines.join("\n"),"text/csv");
+}
+
+/* ---------- Settings ---------- */
+function renderSettings(){
+  const p=$("#panel"),shops=settings.shops||[],o=(settings.opening||{})[state.shop]||{};
+  p.innerHTML=`<div class="cols">
+    <div class="card"><h2 style="margin-bottom:12px">Businesses / shops</h2>
+      <div class="shoplist" id="shopList">${shops.map((s,i)=>`<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label></div>`).join("")}</div>
+      <div class="actions" style="margin-top:10px"><input type="text" id="newShop" placeholder="New shop name" style="flex:1"><button class="btn ghost small" id="addShop">Add</button></div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="saveShops"${canWrite?"":" disabled"}>Save shops</button></div>
+      <p class="muted small">Each shop keeps separate books. Match POS works out each day's sale from the POS running total.</p>
+    </div>
+    <div class="card"><h2 style="margin-bottom:6px">Opening balances · ${esc((curShop()||{}).name||"")}</h2>
+      <p class="muted small" style="margin-top:0">Count the galla cash and check the UPI / bank balance once. Every entry from this date on is added or taken out to give running balances.</p>
+      <form class="f" id="opForm">
+        <label class="fl">As on date<input type="date" id="op_date" value="${esc(o.date||todayStr())}" required></label>
+        <div class="row2">${field("op_amt","Cash in galla",o.amount)}${field("op_bank","UPI / bank balance",o.bank)}</div>
+        <div class="actions"><button class="btn" type="submit"${canWrite&&state.shop?"":" disabled"}>Save opening balances</button></div>
+      </form>
+    </div></div>
+    <div class="cols">
+      <div class="card"><h2 style="margin-bottom:6px" id="uf_title">Add a login</h2>
+        <p class="muted small" style="margin-top:0">Owners see and change everything. Shop managers can only add new entries for their shops.</p>
+        <form class="f" id="userForm" autocomplete="off">
+          <input type="hidden" id="uf_id">
+          <label class="fl">Name<input type="text" id="uf_name" required placeholder="e.g. Rosy counter, Priya"></label>
+          <label class="fl">Role<select id="uf_role"><option value="manager">Shop manager (entry only)</option><option value="owner">Owner (full access)</option></select></label>
+          <fieldset id="uf_shops"><legend>Shops this login can enter for</legend>${shops.map(s=>`<label class="tick"><input type="checkbox" value="${esc(s.id)}"> ${esc(s.name)}</label>`).join("")||'<span class="muted small">Add a shop first</span>'}</fieldset>
+          <div class="row2"><label class="fl" id="uf_pinlabel">Passcode (4–8 digits)<input class="pin" type="password" inputmode="numeric" id="uf_pin"></label>
+          <label class="fl">Repeat passcode<input class="pin" type="password" inputmode="numeric" id="uf_pin2"></label></div>
+          <div class="actions"><button class="btn" type="submit" id="uf_btn">Add login</button><button class="link" type="button" id="uf_cancel" hidden>Cancel</button></div>
+        </form>
+      </div>
+      <div class="card"><h2 style="margin-bottom:12px">Logins</h2>
+        <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Shops</th><th></th></tr></thead><tbody>
+        ${(settings.users||[]).map(u=>`<tr><td>${esc(u.name)}${u.id===me().id?' <span class="pill ok">you</span>':""}</td><td>${u.role==="owner"?"Owner":"Shop manager"}</td><td>${u.role==="owner"?"All":esc((u.shops||[]).map(id=>(shops.find(s=>s.id===id)||{}).name).filter(Boolean).join(", ")||"—")}</td>
+          <td><button class="link" data-uedit="${u.id}">Edit / reset passcode</button>${u.id===me().id?"":`<span class="dw"><button class="link del" data-udel="${u.id}">Remove</button></span>`}</td></tr>`).join("")}
+        </tbody></table></div>
+        <p class="muted small" style="margin:10px 0 0">Entries sync live on every device that has this page open. Each device stays logged in until someone taps Log out.</p>
+      </div>
+    </div>
+    <div class="card"><h2 style="margin-bottom:6px">Backup</h2>
+      <p class="muted small" style="margin-top:0">Download a full copy of all shops, logins, entries and bill photos once a week and keep it safe (Google Drive or WhatsApp to yourself). Restoring adds the file's records back and overwrites any with the same ID.</p>
+      <div class="actions"><button class="btn ghost" id="bkDown">Download backup</button><label class="btn ghost" for="bkFile">Restore from backup file</label><input type="file" id="bkFile" accept="application/json,.json" hidden></div>
+    </div>`;
+  $("#bkDown").onclick=downloadBackup;
+  $("#bkFile").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)restoreBackup(f)};
+  const syncRole=()=>{$("#uf_shops").hidden=$("#uf_role").value==="owner"};
+  $("#uf_role").onchange=syncRole;syncRole();
+  const resetUF=()=>{$("#uf_id").value="";$("#userForm").reset();$("#uf_title").textContent="Add a login";$("#uf_btn").textContent="Add login";$("#uf_cancel").hidden=true;$("#uf_pinlabel").firstChild.textContent="Passcode (4–8 digits)";syncRole()};
+  $("#uf_cancel").onclick=resetUF;
+  p.querySelectorAll("[data-uedit]").forEach(b=>b.onclick=()=>{const u=settings.users.find(x=>x.id===b.dataset.uedit);if(!u)return;
+    $("#uf_id").value=u.id;$("#uf_name").value=u.name;$("#uf_role").value=u.role;
+    $("#uf_shops").querySelectorAll("input").forEach(i=>i.checked=(u.shops||[]).includes(i.value));
+    $("#uf_title").textContent="Edit "+u.name;$("#uf_btn").textContent="Save login";$("#uf_cancel").hidden=false;
+    $("#uf_pinlabel").firstChild.textContent="New passcode (leave blank to keep)";syncRole();$("#uf_name").focus()});
+  p.querySelectorAll("[data-udel]").forEach(b=>b.onclick=()=>confirmInline(b.parentElement,async()=>{
+    await saveSettings({...settings,users:settings.users.filter(u=>u.id!==b.dataset.udel)})}));
+  $("#userForm").onsubmit=async e=>{e.preventDefault();
+    const id=$("#uf_id").value,name=$("#uf_name").value.trim(),role=$("#uf_role").value,pin=$("#uf_pin").value;
+    const shopIds=[...$("#uf_shops").querySelectorAll("input:checked")].map(i=>i.value);
+    const users=(settings.users||[]).map(u=>({...u}));
+    if(!name){toast("Enter a name");return}
+    if(role==="manager"&&!shopIds.length){toast("Pick at least one shop for this manager");return}
+    if((!id||pin)&&!validPin(pin)){toast("Passcode must be 4 to 8 digits");return}
+    if(pin!==$("#uf_pin2").value){toast("The two passcodes don't match");return}
+    if(id){const u=users.find(x=>x.id===id);if(!u)return;
+      if(u.role==="owner"&&role!=="owner"&&users.filter(x=>x.role==="owner").length<2){toast("Keep at least one owner login");return}
+      Object.assign(u,{name,role,shops:role==="owner"?[]:shopIds});if(pin)u.pin=await hashPin(pin,id);}
+    else{const nid=uid();users.push({id:nid,name,role,shops:role==="owner"?[]:shopIds,pin:await hashPin(pin,nid)})}
+    if(await saveSettings({...settings,users})) resetUF();
+  };
+  const pending=shops.map(s=>({...s}));
+  $("#addShop").onclick=()=>{const n=$("#newShop").value.trim();if(!n)return;let id=slug(n),k=2;while(pending.find(s=>s.id===id))id=slug(n)+"-"+(k++);pending.push({id,name:n});
+    $("#shopList").insertAdjacentHTML("beforeend",`<div class="it"><input type="text" value="${esc(n)}" data-i="${pending.length-1}"><label class="tick"><input type="checkbox" class="poschk" data-i="${pending.length-1}"> Match POS</label></div>`);$("#newShop").value=""};
+  $("#saveShops").onclick=async()=>{
+    document.querySelectorAll("#shopList input[type=text]").forEach(i=>{const s=pending[+i.dataset.i];if(s&&i.value.trim())s.name=i.value.trim()});
+    document.querySelectorAll("#shopList .poschk").forEach(i=>{const s=pending[+i.dataset.i];if(s)s.pos=i.checked});
+    await saveSettings({...settings,shops:pending});};
+  $("#opForm").onsubmit=async e=>{e.preventDefault();const opening={...(settings.opening||{})};
+    opening[state.shop]={date:$("#op_date").value,amount:num($("#op_amt").value),bank:num($("#op_bank").value)};await saveSettings({...settings,opening})};
+}
+
+function confirmInline(wrap,fn){
+  const old=wrap.innerHTML;
+  wrap.innerHTML=`<span class="confirm">Delete? <button class="btn small" type="button">Yes</button><button class="btn ghost small" type="button">No</button></span>`;
+  const [y,n]=wrap.querySelectorAll("button");y.onclick=()=>fn();n.onclick=()=>{wrap.innerHTML=old;render()};
+}
+
+/* ---------- events ---------- */
+$("#shopSel").onchange=e=>{state.shop=e.target.value;state.pay.editId=null;pform={editId:null,photos:[],vals:{},busy:0};render()};
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;if(b.dataset.tab!=="payments"){state.pay.editId=null;state.pay.date=null}render()});
+
+let pendingRender=false;
+function liveRender(){
+  const a=document.activeElement;
+  if(a&&a.closest&&a.closest("form")&&(a.tagName==="INPUT"||a.tagName==="SELECT")){renderSummary();pendingRender=true;return}
+  render();
+}
+document.addEventListener("focusout",()=>{setTimeout(()=>{const a=document.activeElement;if(pendingRender&&!(a&&a.closest&&a.closest("form"))){pendingRender=false;render()}},0)});
+
+render();
+
+window.addEventListener("error",e=>setStatus("Something went wrong on this page: "+(e.message||"unknown error")+". Reload to try again.",true));
+function saveFile(name,text,type){const b=new Blob([text],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
+const COLS=["settings","books","parties","photos"];
+async function downloadBackup(){
+  try{setStatus("Preparing backup…");const data={};
+    for(const c of COLS){const q=await db.collection(c).get();data[c]={};q.docs.forEach(d=>data[c][d.id]=d.data())}
+    saveFile("galla-backup-"+todayStr()+".json",JSON.stringify({app:"galla-cash-book",version:1,exportedAt:new Date().toISOString(),data}),"application/json");
+    setStatus("");toast("Backup downloaded")}
+  catch(e){setStatus("Could not make the backup: "+(e.message||e.code),true)}
+}
+async function restoreBackup(file){
+  let j;try{j=JSON.parse(await file.text())}catch(e){toast("That file is not a cash book backup");return}
+  if(!j||j.app!=="galla-cash-book"||!j.data){toast("That file is not a cash book backup");return}
+  const items=[];for(const c of COLS)for(const [id,d] of Object.entries(j.data[c]||{}))items.push([c,id,d]);
+  let n=0;setStatus("Restoring 0 of "+items.length+" records…");
+  try{for(const [c,id,d] of items){await db.doc(c+"/"+id).set(d);n++;setStatus("Restoring "+n+" of "+items.length+" records…")}
+    setStatus("");toast("Restored "+n+" records. Log in with your usual passcode.")}
+  catch(e){setStatus("Restore stopped after "+n+" records: "+(e.message||e.code)+". Check the Firestore rules, then try again.",true)}
+}
+
+/* ---------- Firebase ---------- */
+const PREFIX="galla_";
+const mapPath=p=>{const s=p.split("/");s[0]=PREFIX+s[0];return s.join("/")};
+const wrapSnap=s=>({id:s.id,exists:s.exists,data:()=>s.data(),metadata:s.metadata});
+const wrapErr=(e,cb)=>err=>cb&&cb({code:err.code,message:err.message});
+function makeDb(fs){
+  const docRef=p=>{const r=fs.doc(mapPath(p));return {id:r.id,path:p,
+    get:async()=>wrapSnap(await r.get()),set:d=>r.set(d),update:d=>r.set(d,{merge:true}),delete:()=>r.delete(),
+    onSnapshot:(n,e)=>r.onSnapshot(s=>n(wrapSnap(s)),wrapErr(e,e))}};
+  const colRef=p=>{const c=fs.collection(mapPath(p));const wq=q=>({docs:q.docs.map(wrapSnap),size:q.size,empty:q.empty});return {path:p,
+    doc:id=>docRef(p+"/"+(id||c.doc().id)),get:async()=>wq(await c.get()),
+    onSnapshot:(n,e)=>c.onSnapshot(q=>n(wq(q)),wrapErr(e,e))}};
+  return {doc:docRef,collection:colRef};
+}
+
+(async function boot(){
+  const cfg=window.GALLA_FIREBASE_CONFIG||{};
+  if(!window.firebase&&cfg.apiKey&&!/PASTE/.test(cfg.apiKey)){
+    setStatus("");$("#panel").innerHTML=`<div class="gate card"><h2>Connect to the internet once</h2><p class="muted">This phone hasn't downloaded the cash book yet. Open the app once with internet; after that it works offline too.</p><button class="btn" onclick="location.reload()">Try again</button></div>`;return}
+  if(!window.firebase||!cfg.apiKey||/PASTE/.test(cfg.apiKey)){
+    setStatus("");$("#panel").innerHTML=`<div class="gate card"><h2>Connect Firebase</h2><p class="muted">Open <b>index.html</b>, find <b>GALLA_FIREBASE_CONFIG</b> near the top and paste your Firebase project's config there, then upload the file again. The setup guide has the steps.</p></div>`;return}
+  setStatus("Connecting to the cash book…");
+  try{
+    firebase.initializeApp(cfg);
+    const fs=firebase.firestore();
+    try{await fs.enablePersistence({synchronizeTabs:true})}catch(e){}
+    await firebase.auth().signInAnonymously();
+    db=makeDb(fs);
+  }catch(e){
+    const c=e&&e.code||"";
+    setStatus(c==="auth/operation-not-allowed"||c==="auth/admin-restricted-operation"?"Turn on Anonymous sign-in in Firebase → Authentication → Sign-in method, then reload.":"Could not connect to Firebase: "+(e.message||c)+". Check the internet connection and the config, then reload.",true);
+    return}
+  canWrite=true;viewerCanEdit=true;
+  setStatus("Loading your books…");
+  let gotS=false,gotB=false;
+  const fail=e=>{
+    if(e.code!=="permission-denied"){setStatus("Lost connection ("+e.code+"). Reload the page.",true);return}
+    setStatus("");$("#panel").innerHTML=`<div class="gate card"><h2>One step left in Firebase</h2>
+      <p class="muted">Firebase is not allowing the cash book to save yet. In the Firebase console open <b>Firestore Database → Rules</b>, paste these 3 lines just below the line <span class="num">match /databases/{database}/documents {</span>, tap <b>Publish</b>, then reload this page.</p>
+      <pre class="num" style="background:var(--soft);padding:12px;border-radius:8px;overflow-x:auto;font-size:13px">match /{col}/{docId} {
+  allow read, write: if request.auth != null &amp;&amp; col.matches('galla_.*');
+}</pre></div>`};
+  const ready=()=>{if(gotS&&gotB&&!loaded){loaded=true;setStatus("");render()}};
+  db.doc("settings/main").onSnapshot(s=>{settings=s.exists?{shops:[],opening:{},users:[],...s.data()}:{shops:[],opening:{},users:[]};gotS=true;loaded?liveRender():ready()},fail);
+  db.collection("parties").onSnapshot(q=>{const m={};q.docs.forEach(d=>m[d.id]=d.data());partyDocs=m;if(loaded)liveRender()},()=>{});
+  db.collection("books").onSnapshot(q=>{const nb={};q.docs.forEach(d=>nb[d.id]=d.data());books=nb;gotB=true;loaded?liveRender():ready()},fail);
+})();
+})();
+</script>
+
+<script>
+/* ---------- Installable app (PWA) ---------- */
+(function(){
+  const btn=document.getElementById("installBtn"),hint=document.getElementById("iosHint");
+  const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  let deferred=null;
+
+  if("serviceWorker" in navigator&&location.protocol!=="file:"){
+    window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").then(reg=>{
+      reg.addEventListener("updatefound",()=>{const w=reg.installing;if(!w)return;
+        w.addEventListener("statechange",()=>{if(w.state==="activated"&&navigator.serviceWorker.controller){
+          const t=document.getElementById("toast");t.textContent="App updated. Reopen it to use the new version.";t.hidden=false;setTimeout(()=>t.hidden=true,5000)}})});
+    }).catch(()=>{})});
+  }
+  if(standalone) return;
+
+  window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;btn.hidden=false});
+  window.addEventListener("appinstalled",()=>{btn.hidden=true;deferred=null});
+  if(ios){btn.hidden=false}
+
+  btn.onclick=async()=>{
+    if(deferred){deferred.prompt();const r=await deferred.userChoice.catch(()=>null);deferred=null;if(r&&r.outcome==="accepted")btn.hidden=true;return}
+    if(ios){hint.hidden=false;return}
+    const t=document.getElementById("toast");t.textContent="Open the browser menu (⋮) and tap Install app or Add to Home screen.";t.hidden=false;setTimeout(()=>t.hidden=true,4000);
+  };
+  document.getElementById("iosHintOk").onclick=()=>{hint.hidden=true};
+})();
+</script>
+
+</body>
+</html>

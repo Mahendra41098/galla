@@ -174,6 +174,17 @@ legend{font-size:12px;color:var(--muted);padding:0 4px}
 .ioshint b{font-family:var(--display);font-size:16px}
 .offline-dot{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--warn-soft);color:var(--warn)}
 @media (display-mode:standalone){#installBtn{display:none!important}}
+.sugg{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 4px}
+.sugg:empty{display:none}
+.hlist{display:grid;border-top:1px solid var(--line)}
+.hrow{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.hn{display:grid;gap:2px;min-width:0}.hn b{font-weight:600;overflow-wrap:anywhere}
+.ha{display:flex;gap:12px;align-items:center;flex-shrink:0}
+.sugg .sg{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:99px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;min-height:32px}
+.sugg .sg small{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.sugg .sg:hover{border-color:var(--accent)}
+.sugg .sg.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.sugg .sgnew{font-size:12px;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:5px 8px;width:100%}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -392,7 +403,7 @@ async function write(fn,okMsg){
   if(!db){toast("Saving is unavailable here");return false}
   try{
     const r=await Promise.race([fn().then(()=>"ok"),new Promise(res=>setTimeout(()=>res("queued"),5000))]);
-    toast(r==="queued"?"Saved on this device. It will sync when the internet is back.":(okMsg||"Saved"));return true}
+    if(okMsg!==false)toast(r==="queued"?"Saved on this device. It will sync when the internet is back.":(okMsg||"Saved"));return true}
   catch(e){
     if(e&&e.code==="permission-denied") toast("Not allowed to save. Check the Firestore rules (see setup guide).");
     else if(e&&e.code==="quota_exceeded") toast("Storage is full. Delete old entries to save new ones.");
@@ -528,6 +539,107 @@ function renderDatalists(){
     all.filter(x=>x.type===t).forEach(x=>x.name&&names.add(x.name));
     $("#dl-"+t).innerHTML=[...names].map(n=>`<option value="${esc(n)}">`).join("");
   }
+}
+
+/* ---------- Heads: saved names for expenses, salary staff and parties ----------
+   settings.heads[shopId] = {expense:[...], salary:[...], hidden:{expense:[...], salary:[...]}}
+   Suggestions = saved heads + every name already used, minus hidden ones, most used first. */
+function headCfg(shop){const h=((settings.heads||{})[shop||state.shop])||{};return {expense:h.expense||null,salary:h.salary||[],hidden:h.hidden||{}}}
+function headStats(type,shop){
+  shop=shop||state.shop;const st={};
+  txnsBetween(shop,"0000","9999").filter(x=>x.type===type&&x.name).forEach(x=>{const k=pkey(x.name);const s=st[k]||(st[k]={name:x.name.trim(),n:0,amt:0,last:""});s.n++;s.amt=r2(s.amt+num(x.amount));if(x.date>=s.last){s.last=x.date;s.name=x.name.trim()}});
+  return st;
+}
+function headList(type,shop){
+  shop=shop||state.shop;
+  if(type==="party"||type==="partyall"){
+    const book=partyBook(shop);
+    return Object.values(book).sort((a,b)=>(b.bills.length+b.pays.length)-(a.bills.length+a.pays.length)||a.name.localeCompare(b.name)).map(r=>({name:r.name,n:r.bills.length+r.pays.length,saved:!!r.docId}));
+  }
+  const cfg=headCfg(shop),st=headStats(type,shop),hidden=new Set((cfg.hidden[type]||[]).map(pkey));
+  const saved=type==="expense"?(cfg.expense||DEFAULT_CATS):cfg.salary;
+  const map={};
+  saved.forEach(n=>{const k=pkey(n);map[k]={name:n,n:0,amt:0,saved:true}});
+  Object.entries(st).forEach(([k,s])=>{if(map[k]){map[k].n=s.n;map[k].amt=s.amt}else map[k]={name:s.name,n:s.n,amt:s.amt,saved:false}});
+  return Object.entries(map).filter(([k])=>!hidden.has(k)).map(([,v])=>v).sort((a,b)=>b.n-a.n||a.name.localeCompare(b.name));
+}
+/* Same head typed differently ("rent ", "RENT") → use the saved spelling */
+function canonHead(type,name){const k=pkey(name);if(!k)return name.trim();const hit=headList(type).find(h=>pkey(h.name)===k);return hit?hit.name:name.trim().replace(/\s+/g," ")}
+async function rememberHead(type,name){
+  if(type!=="expense"&&type!=="salary") return;
+  const cfg=headCfg(),k=pkey(name);if(!k)return;
+  const list=type==="expense"?(cfg.expense||DEFAULT_CATS):cfg.salary;
+  const hid=(cfg.hidden[type]||[]).filter(n=>pkey(n)!==k);
+  if(list.some(n=>pkey(n)===k)&&hid.length===(cfg.hidden[type]||[]).length) return;
+  const nextList=list.some(n=>pkey(n)===k)?list:[...list,name];
+  await writeHeads(type,nextList,hid,true);
+}
+function writeHeads(type,list,hidden,quiet){
+  const all={...(settings.heads||{})},cur={...(all[state.shop]||{})};
+  cur[type]=list;cur.hidden={...(cur.hidden||{}),[type]:hidden};all[state.shop]=cur;
+  return write(async()=>{await db.doc("settings/main").update({heads:all})},quiet?false:"Heads saved");
+}
+const HEAD_WORD={expense:"head",salary:"staff",party:"party",partyall:"party"};
+/* Settings → Heads: add, rename (also fixes old entries), remove from suggestions */
+let headsTab="expense";
+function renderHeads(){
+  const el=$("#headsCard");if(!el)return;
+  const type=headsTab,list=headList(type),word=type==="expense"?"expense head":"staff name";
+  el.innerHTML=`<div class="card-head"><h2>Heads · ${esc((curShop()||{}).name||"")}</h2></div>
+    <p class="muted small" style="margin-top:0">These names show as tap-to-pick suggestions when anyone adds a payment, so the same head is never typed two ways. Renaming also changes every old entry with that name. Parties are managed in Party accounts.</p>
+    <div class="seg" role="group" aria-label="Head type" style="margin-bottom:12px"><button type="button" data-ht="expense" aria-pressed="${type==="expense"}">Expense heads</button><button type="button" data-ht="salary" aria-pressed="${type==="salary"}">Salary staff</button></div>
+    <div class="actions" style="margin-bottom:12px"><input type="text" id="hd_new" placeholder="New ${word}" style="flex:1" autocomplete="off"><button class="btn ghost small" id="hd_add">Add</button></div>
+    ${list.length?`<div class="hlist">${list.map((h,i)=>`<div class="hrow" data-hrow="${i}"><div class="hn"><b>${esc(h.name)}</b><span class="muted small">${h.n?`${h.n} entr${h.n===1?"y":"ies"} · ${rs(h.amt)}`:"Not used yet"}</span></div><div class="ha"><button class="link" data-hren="${i}">Rename</button><span class="dw"><button class="link del" data-hdel="${i}">Remove</button></span></div></div>`).join("")}</div>`:`<p class="empty">No ${word}s yet.</p>`}`;
+  el.querySelectorAll("[data-ht]").forEach(b=>b.onclick=()=>{headsTab=b.dataset.ht;renderHeads()});
+  const savedNow=()=>{const c=headCfg();return {list:[...(type==="expense"?(c.expense||DEFAULT_CATS):c.salary)],hidden:[...(c.hidden[type]||[])]}};
+  $("#hd_add").onclick=async()=>{const n=$("#hd_new").value.trim().replace(/\s+/g," ");if(!n)return;
+    if(list.some(h=>pkey(h.name)===pkey(n))){toast("Already in the list");return}
+    const c=savedNow();c.list.push(n);await writeHeads(type,c.list,c.hidden.filter(x=>pkey(x)!==pkey(n)));renderHeads()};
+  $("#hd_new").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("#hd_add").click()}};
+  el.querySelectorAll("[data-hdel]").forEach(b=>b.onclick=()=>{const h=list[+b.dataset.hdel];
+    confirmInline(b.parentElement,async()=>{const c=savedNow();await writeHeads(type,c.list.filter(x=>pkey(x)!==pkey(h.name)),[...c.hidden,h.name]);renderHeads()})});
+  el.querySelectorAll("[data-hren]").forEach(b=>b.onclick=()=>{const h=list[+b.dataset.hren],tr=b.closest(".hrow");
+    tr.innerHTML=`<div style="flex:1"><div class="actions"><input type="text" value="${esc(h.name)}" style="flex:1" autocomplete="off"><button class="btn small">Save</button><button class="link" type="button">Cancel</button></div>${h.n?`<p class="muted small" style="margin:6px 0 0">${h.n} old entr${h.n===1?"y":"ies"} will change to the new name. Using a name that already exists merges the two.</p>`:""}</div>`;
+    const inp=tr.querySelector("input");inp.focus();inp.select();
+    tr.querySelector(".link").onclick=renderHeads;
+    tr.querySelector(".btn").onclick=()=>renameHead(type,h.name,inp.value)});
+}
+async function renameHead(type,oldName,newName){
+  newName=newName.trim().replace(/\s+/g," ");const ok=pkey(oldName);if(!newName||newName===oldName){renderHeads();return}
+  const target=headList(type).find(h=>pkey(h.name)===pkey(newName)&&pkey(h.name)!==ok);
+  if(target) newName=target.name;
+  const c=headCfg();let list=[...(type==="expense"?(c.expense||DEFAULT_CATS):c.salary)].filter(x=>pkey(x)!==ok);
+  if(!list.some(x=>pkey(x)===pkey(newName))) list.push(newName);
+  const hidden=(c.hidden[type]||[]).filter(x=>pkey(x)!==pkey(newName));
+  const hits=txnsBetween(state.shop,"0000","9999").filter(x=>x.type===type&&pkey(x.name)===ok);
+  const byMonth={};hits.forEach(x=>{(byMonth[x.date.slice(0,7)]=byMonth[x.date.slice(0,7)]||{date:x.date,txns:{}}).txns[x.id]={name:newName}});
+  const done=await write(async()=>{
+    for(const m of Object.values(byMonth)){const ref=await ensureBook(state.shop,m.date);await ref.update({txns:m.txns})}
+  },false);
+  if(!done) return;
+  await writeHeads(type,list,hidden,true);
+  toast(target?`Merged into ${newName} · ${hits.length} entr${hits.length===1?"y":"ies"} updated`:`Renamed · ${hits.length} entr${hits.length===1?"y":"ies"} updated`);
+  renderHeads();
+}
+
+/* Tap-to-pick suggestions under a name box */
+function attachPicker(input,type){
+  if(!input) return;
+  input.removeAttribute("list");input.setAttribute("autocomplete","off");
+  const box=document.createElement("div");box.className="sugg";input.closest("label").after(box);
+  const draw=()=>{
+    const q=pkey(input.value),all=headList(type);
+    let hits=q?all.filter(h=>pkey(h.name).includes(q)).sort((a,b)=>(pkey(b.name).startsWith(q)-pkey(a.name).startsWith(q))||b.n-a.n):all;
+    const exact=q&&all.some(h=>pkey(h.name)===q);
+    hits=hits.slice(0,q?10:12);
+    const word=HEAD_WORD[type];
+    box.innerHTML=(hits.length?hits.map(h=>`<button type="button" class="sg${pkey(h.name)===q?" on":""}" data-v="${esc(h.name)}">${esc(h.name)}${h.n?`<small>${h.n}</small>`:""}</button>`).join(""):"")
+      +(q&&!exact?`<span class="sgnew">New ${word}: <b>${esc(input.value.trim())}</b> · will be added to your list</span>`:"")
+      +(!q&&!hits.length?`<span class="sgnew">No saved ${word} names yet. Type one; it's added to your list when you save.</span>`:"");
+    box.querySelectorAll(".sg").forEach(b=>b.onmousedown=e=>e.preventDefault());
+    box.querySelectorAll(".sg").forEach(b=>b.onclick=()=>{input.value=b.dataset.v;input.dispatchEvent(new Event("input",{bubbles:true}));const nx=input.form&&[...input.form.querySelectorAll("input,select")].find((el,i,a)=>a[i-1]===input);if(nx&&nx.type!=="date")nx.focus()});
+  };
+  input.addEventListener("input",draw);draw();
 }
 
 function renderSummary(){
@@ -721,6 +833,7 @@ function renderPayments(){
       <tr class="total"><td colspan="5">Total</td><td class="num r">${rs(total)}</td><td></td></tr>
       </tbody></table></div>`:`<p class="empty">No payments match for ${esc(periodLabel())}.</p>`}
     </div></div>`;
+  attachPicker($("#t_name"),type);
   p.querySelectorAll(".seg button[data-type]").forEach(b=>b.onclick=()=>{state.pay.type=b.dataset.type;state.pay.editId=null;render()});
   const ce=$("#cancelEdit");if(ce) ce.onclick=()=>{state.pay.editId=null;render()};
   $("#f_type").onchange=e=>{pf.type=e.target.value;render()};
@@ -728,7 +841,9 @@ function renderPayments(){
   let qt;$("#f_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{pf.q=e.target.value.trim();render();const q=$("#f_q");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)};
   $("#txForm").onsubmit=async e=>{e.preventDefault();
     const amt=num($("#t_amount").value);if(amt<=0){toast("Enter an amount above zero");return}
-    const entry={type,date:$("#t_date").value,amount:amt,name:$("#t_name").value.trim(),mode:$("#t_mode").value,note:$("#t_note").value.trim()};
+    const entry={type,date:$("#t_date").value,amount:amt,name:canonHead(type,$("#t_name").value),mode:$("#t_mode").value,note:$("#t_note").value.trim()};
+    if(!entry.name){toast("Pick or type a "+T.nameLabel.toLowerCase());return}
+    rememberHead(type,entry.name);
     if(T.sub) entry.sub=$("#t_sub").value.trim();
     entry.by=editing&&editing.by?editing.by:me().name;if(editing)entry.editedBy=me().name;
     if(editing&&editing.settles&&type==="party"){let left=amt;const st=[];for(const [id,a] of settleList(editing)){const v=Math.min(a,left);if(v>0){st.push({b:id,a:r2(v)});left=r2(left-v)}}entry.settles=st;}
@@ -911,12 +1026,13 @@ function renderBillRegister(p){
   renderPhotoStrip();fillPhotos(p);
   const fileIn=$("#pFile");fileIn.onchange=async()=>{const fs=[...fileIn.files];fileIn.value="";await addPhotos(fs)};
   const form=$("#pForm");
+  attachPicker($("#p_party"),"partyall");
   form.addEventListener("input",e=>{const id=e.target.id;if(id&&id.startsWith("p_")&&id!=="p_q")pform.vals[id.slice(2)]=e.target.value});
   const pc=$("#pCancel");if(pc) pc.onclick=()=>{pform={editId:null,photos:[],vals:{},busy:0};render()};
   form.onsubmit=async e=>{e.preventDefault();
     if(pform.busy){toast("Wait for photos to finish uploading");return}
     const amt=num($("#p_amount").value);if(amt<=0){toast("Enter the bill amount");return}
-    const entry={date:$("#p_date").value,party:$("#p_party").value.trim(),billNo:$("#p_billNo").value.trim(),amount:amt,note:$("#p_note").value.trim(),photos:pform.photos.map(x=>({...x}))};
+    const entry={date:$("#p_date").value,party:canonHead("partyall",$("#p_party").value),billNo:$("#p_billNo").value.trim(),amount:amt,note:$("#p_note").value.trim(),photos:pform.photos.map(x=>({...x}))};
     if(!entry.party){toast("Enter the party name");return}
     let ok;
     if(editing){
@@ -973,6 +1089,7 @@ function renderPartyAccounts(p){
   let qt;$("#pa_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{state.partyq=e.target.value.trim();render();const s=$("#pa_q");s.focus();s.setSelectionRange(s.value.length,s.value.length)},250)};
   p.querySelectorAll("[data-party]").forEach(b=>b.onclick=()=>{state.party=b.dataset.party;if(payForm.party!==state.party)payForm={party:null,alloc:{},vals:{}};render()});
   const np=$("#npForm");
+  attachPicker($("#np_name"),"partyall");
   $("#newParty").onclick=()=>{np.hidden=false;$("#np_name").focus()};
   $("#npCancel").onclick=()=>{np.hidden=true};
   np.onsubmit=async e=>{e.preventDefault();const name=$("#np_name").value.trim();if(!name)return;
@@ -1175,10 +1292,12 @@ function renderSettings(){
         <p class="muted small" style="margin:10px 0 0">Entries sync live on every device that has this page open. Each device stays logged in until someone taps Log out.</p>
       </div>
     </div>
+    <div class="card" id="headsCard"></div>
     <div class="card"><h2 style="margin-bottom:6px">Backup</h2>
       <p class="muted small" style="margin-top:0">Download a full copy of all shops, logins, entries and bill photos once a week and keep it safe (Google Drive or WhatsApp to yourself). Restoring adds the file's records back and overwrites any with the same ID.</p>
       <div class="actions"><button class="btn ghost" id="bkDown">Download backup</button><label class="btn ghost" for="bkFile">Restore from backup file</label><input type="file" id="bkFile" accept="application/json,.json" hidden></div>
     </div>`;
+  renderHeads();
   $("#bkDown").onclick=downloadBackup;
   $("#bkFile").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)restoreBackup(f)};
   const syncRole=()=>{$("#uf_shops").hidden=$("#uf_role").value==="owner"};

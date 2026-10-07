@@ -53,7 +53,7 @@ header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 nav.tabs{display:flex;gap:2px;overflow-x:auto;max-width:100%}
 nav.tabs button{border:0;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-radius:6px;white-space:nowrap;font-weight:500}
 nav.tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
-header.bar{border-top:4px solid var(--accent);background:color-mix(in srgb,var(--accent-soft) 55%,var(--bg))}
+
 #shopSel{border:2px solid var(--accent);border-radius:8px;font-weight:600;color:var(--accent);background:var(--paper);padding:6px 10px}
 .swatches{display:flex;flex-wrap:wrap;gap:6px;width:100%}
 .swatches button{width:28px;height:28px;border-radius:50%;border:2px solid var(--paper);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
@@ -193,6 +193,25 @@ legend{font-size:12px;color:var(--muted);padding:0 4px}
 .sugg .sg:hover{border-color:var(--accent)}
 .sugg .sg.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .sugg .sgnew{font-size:12px;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:5px 8px;width:100%}
+:root{--accent2:#b4304f}
+body{background:radial-gradient(1200px 500px at 85% -10%,color-mix(in srgb,var(--accent-soft) 85%,transparent),transparent 70%),var(--bg);background-attachment:fixed}
+header.bar{border-top:4px solid transparent;border-image:linear-gradient(90deg,var(--accent),var(--accent2)) 1;border-bottom-color:color-mix(in srgb,var(--accent) 18%,var(--line));background:color-mix(in srgb,var(--accent-soft) 70%,var(--bg));backdrop-filter:saturate(1.2)}
+.brand h1{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+nav.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.btn:not(.ghost){background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.tile.hero{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.card{border-top:3px solid color-mix(in srgb,var(--accent) 22%,var(--line))}
+.seg button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.swatches button{width:32px;height:32px}
+.swname{width:100%}
+.boxcalc{display:grid;gap:4px;font-size:14px;background:var(--soft);border-radius:8px;padding:10px 12px}
+.boxcalc .ln{display:flex;justify-content:space-between;gap:8px}
+.boxcalc .ln.tot{border-top:1px solid var(--line);padding-top:4px;font-weight:600}
+.boxres{border-radius:8px;padding:10px 12px;font-weight:600;font-size:14px}
+.boxres.ok{background:var(--good-soft);color:var(--good)}
+.boxres.up{background:color-mix(in srgb,var(--good-soft) 70%,var(--paper));color:var(--good)}
+.boxres.down{background:var(--warn-soft);color:var(--warn)}
+.btn.warnbtn{background:var(--warn);color:var(--paper)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -301,23 +320,30 @@ function scaleFor(){
 }
 const SCALE_NAME={100:"hundreds (÷100)",1000:"thousands (÷1000)"};
 /* Each business gets its own colour */
+/* n: name · l: light [accent, accent2, soft] · d: dark [accent, accent2, soft] */
 const PALETTE={
-  maroon:{n:"Maroon",l:["#8e1f34","#f6e6e9"],d:["#e2768a","#3a1d24"]},
-  teal:{n:"Teal",l:["#0f6b6b","#dff1f0"],d:["#5cc8c2","#12302f"]},
-  blue:{n:"Blue",l:["#1f4fa3","#e4ecf9"],d:["#7ea8f0","#172a47"]},
-  green:{n:"Green",l:["#2f6b2a","#e5f1e2"],d:["#7fcb74","#1a2f18"]},
-  purple:{n:"Purple",l:["#5b2d91","#eee6f7"],d:["#b48cf0","#2b1f3d"]},
-  orange:{n:"Orange",l:["#a24a0c","#fbebdd"],d:["#f0a15f","#3a2616"]},
-  pink:{n:"Pink",l:["#a8246b","#f8e3ef"],d:["#f07ab8","#3b1a2c"]},
-  slate:{n:"Slate",l:["#33475b","#e6ebf0"],d:["#9db3c8","#1f2a35"]}};
+  maroon:{n:"Rosy maroon",l:["#8e1f34","#b4304f","#f8e4e9"],d:["#e2768a","#f09aa9","#3a1d26"]},
+  rose:{n:"Rose pink",l:["#b0124f","#d6336c","#fde6ef"],d:["#f27aa3","#f8a5c2","#3d1a29"]},
+  coral:{n:"Coral sunset",l:["#b83a1b","#c94824","#ffe9e1"],d:["#f59273","#f8b29a","#3d2219"]},
+  marigold:{n:"Marigold",l:["#a14b06","#b05a05","#fff0d9"],d:["#f5ad4a","#f8c97a","#3a2a14"]},
+  emerald:{n:"Emerald",l:["#04704f","#088560","#ddf6ec"],d:["#4fd3a5","#86e5c2","#123126"]},
+  forest:{n:"Fresh leaf",l:["#3b5e14","#557f19","#ebf5dc"],d:["#9fd36a","#c0e597","#1f2d14"]},
+  peacock:{n:"Peacock",l:["#0e6b73","#0b7f93","#dcf4f5"],d:["#4fd0d8","#86e2e8","#10302f"]},
+  ocean:{n:"Ocean blue",l:["#0b5f99","#1676bd","#e0f0fb"],d:["#6cc0f2","#9dd5f7","#132b3d"]},
+  royal:{n:"Royal indigo",l:["#3f37c9","#5b45e0","#e9e8ff"],d:["#a5a0ff","#c3bfff","#211f45"]},
+  lavender:{n:"Lavender",l:["#7a2bc4","#9333ea","#f3e9fe"],d:["#c9a2fb","#dcc3fd","#2b1f3d"]},
+  berry:{n:"Berry",l:["#8e1a62","#b0207c","#fbe6f3"],d:["#ec84c6","#f3abd9","#38192e"]},
+  midnight:{n:"Midnight",l:["#1f3a64","#2f5490","#e4ebf6"],d:["#93b4e6","#b6cdf0","#18253a"]}};
+const OLDKEY={teal:"peacock",blue:"ocean",green:"emerald",purple:"royal",orange:"marigold",pink:"rose",slate:"midnight"};
 const PKEYS=Object.keys(PALETTE);
-function shopColor(id){const shops=settings.shops||[],i=shops.findIndex(s=>s.id===id);if(i<0)return "maroon";return PALETTE[shops[i].color]?shops[i].color:PKEYS[i%PKEYS.length]}
+const DEFAULT_ORDER=["maroon","peacock","marigold","royal","emerald","rose","ocean","coral","lavender","forest","berry","midnight"];
+function shopColor(id){const shops=settings.shops||[],i=shops.findIndex(s=>s.id===id);if(i<0)return "maroon";const c=OLDKEY[shops[i].color]||shops[i].color;return PALETTE[c]?c:DEFAULT_ORDER[i%DEFAULT_ORDER.length]}
 const darkMQ=matchMedia("(prefers-color-scheme: dark)");
 function applyTheme(key){
   key=key||(state.shop?shopColor(state.shop):"maroon");applyTheme.cur=key;
   const root=document.documentElement,t=root.dataset.theme,dark=t==="dark"||(t!=="light"&&darkMQ.matches);
-  const [a,soft]=PALETTE[key][dark?"d":"l"];
-  root.style.setProperty("--accent",a);root.style.setProperty("--accent-soft",soft);root.style.setProperty("--accent-ink",dark?"#10141a":"#ffffff");
+  const [a,a2,soft]=PALETTE[key][dark?"d":"l"];
+  root.style.setProperty("--accent",a);root.style.setProperty("--accent2",a2);root.style.setProperty("--accent-soft",soft);root.style.setProperty("--accent-ink",dark?"#10141a":"#ffffff");
   const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=dark?"#121615":a;
 }
 darkMQ.addEventListener&&darkMQ.addEventListener("change",()=>applyTheme(applyTheme.cur));
@@ -381,12 +407,16 @@ function allSales(shop){
   out.sort((a,b)=>a.date<b.date?-1:1);
   let prev=null;
   for(const e of out){
-    if(!hasVal(e.posReading)) continue;
+    if(!hasVal(e.posReading)){
+      /* No reading typed: carry the running total forward with the sale entered (flexible POS) */
+      if(prev){e.autoReading=r2(prev.r+num(e.total)-num(e.ret));prev={r:e.autoReading,date:e.date,auto:true,real:prev.real}}
+      continue;
+    }
     const r=num(e.posReading);
     if(e.posStart||!prev){e.posIsStart=true;e.posDay=e.posFull?r:0;e.posPrev=null}
     else{e.posIsStart=false;e.posDay=r2(r-prev.r);e.posPrev=prev}
     e.total=r2(e.posDay+num(e.ret));
-    prev={r,date:e.date};
+    prev={r,date:e.date,real:{r,date:e.date}};
   }
   salesCache.set(shop,out);return out;
 }
@@ -396,24 +426,26 @@ function allPurchases(shop){
   return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
 }
 function salesBetween(shop,from,to){return allSales(shop).filter(e=>e.date>=from&&e.date<=to)}
-function prevReading(shop,date){let p=null;for(const e of allSales(shop)){if(e.date>=date)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
-function lastReading(shop,upto){let p=null;for(const e of allSales(shop)){if(e.date>upto)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
+function readingOf(e){return hasVal(e.posReading)?{r:num(e.posReading),date:e.date}:hasVal(e.autoReading)?{r:e.autoReading,date:e.date,auto:true}:null}
+function prevReading(shop,date){let p=null;for(const e of allSales(shop)){if(e.date>=date)break;p=readingOf(e)||p}return p}
+function lastReading(shop,upto){let p=null;for(const e of allSales(shop)){if(e.date>upto)break;p=readingOf(e)||p}return p}
+function lastRealReading(shop,before){let p=null;for(const e of allSales(shop)){if(e.date>=before)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
 function txnsBetween(shop,from,to,type){
   const out=[];
   for(const b of shopBooks(shop)){const t=b.txns||{};for(const id in t){const e=t[id];if(!e||e.deleted)continue;if(type&&e.type!==type)continue;if(e.date>=from&&e.date<=to)out.push({id,...e})}}
   return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
 }
 function totals(shop,from,to){
-  const t={gross:0,ret:0,cash:0,upi:0,unpaid:0,duesCash:0,duesUpi:0,expense:0,salary:0,party:0,cashOut:0,bankOut:0,days:0,openUnpaid:0};
+  const t={gross:0,ret:0,cash:0,upi:0,unpaid:0,duesCash:0,duesUpi:0,expense:0,salary:0,party:0,cashOut:0,bankOut:0,days:0,openUnpaid:0,cashAdj:0};
   for(const s of salesBetween(shop,from,to)){
     t.gross+=num(s.total);t.ret+=num(s.ret);t.cash+=num(s.cash);t.upi+=num(s.upi);t.unpaid+=num(s.unpaid);
-    t.duesCash+=num(s.duesCash);t.duesUpi+=num(s.duesUpi);t.days++;
+    t.duesCash+=num(s.duesCash);t.duesUpi+=num(s.duesUpi);t.days++;t.cashAdj+=num(s.cashAdj);
     if(s.posIsStart) t.openUnpaid+=num(s.posOpenUnpaid);
   }
   for(const x of txnsBetween(shop,from,to)){t[x.type]+=num(x.amount);if(x.mode==="Cash")t.cashOut+=num(x.amount);else t.bankOut+=num(x.amount)}
   for(const k in t) t[k]=r2(t[k]);
   t.net=r2(t.gross-t.ret);t.out=r2(t.expense+t.salary+t.party);
-  t.cashFlow=r2(t.cash+t.duesCash-t.cashOut);t.bankFlow=r2(t.upi+t.duesUpi-t.bankOut);
+  t.cashFlow=r2(t.cash+t.duesCash-t.cashOut+t.cashAdj);t.bankFlow=r2(t.upi+t.duesUpi-t.bankOut);
   t.dues=r2(t.duesCash+t.duesUpi);
   return t;
 }
@@ -426,7 +458,7 @@ function issuesOf(s){
   const out=[];
   if(!s) return out;
   const d=splitDiff(s);if(d) out.push((d>0?"Split short ":"Split over ")+rs(Math.abs(d)));
-  if(posOn()){if(!hasVal(s.posReading))out.push("No POS reading");else if(!s.posIsStart&&s.posDay<0)out.push("POS reading dropped")}
+  if(posOn()){if(!hasVal(s.posReading)&&!hasVal(s.autoReading))out.push("No POS reading");else if(hasVal(s.posReading)&&!s.posIsStart&&s.posDay<0)out.push("POS reading dropped")}
   return out;
 }
 
@@ -731,31 +763,37 @@ function renderSummary(){
     <div class="tile"><span class="k">Cash in galla</span><span class="v">${cih==null?"—":rs(cih)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
     <div class="tile"><span class="k">UPI / bank</span><span class="v">${bank==null?"—":rs(bank)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
     <div class="tile"><span class="k">Unpaid due</span><span class="v">${rs(due)}</span><span class="s">From customers</span></div>
-    <div class="tile"><span class="k">${posOn()?"POS reading":"Days entered"}</span><span class="v">${posOn()?(lr?rs(lr.r):"—"):t.days}</span><span class="s">${posOn()?(lr?"On "+esc(niceDate(lr.date)):"None yet"):""}</span></div></div>`:""}`;
+    <div class="tile"><span class="k">${posOn()?"POS reading":"Days entered"}</span><span class="v">${posOn()?(lr?rs(lr.r):"—"):t.days}</span><span class="s">${posOn()?(lr?(lr.auto?"Auto · ":"On ")+esc(niceDate(lr.date)):"None yet"):""}</span></div></div>`:""}`;
 }
 
 /* ---------- Daily entry ---------- */
 function renderEntry(){
   const p=$("#panel"),date=state.entryDate,pos=posOn();
   const ex=salesBetween(state.shop,date,date)[0]||{};
-  const prev=pos?prevReading(state.shop,date):null;
+  const prev=pos?prevReading(state.shop,date):null,realPrev=pos?lastRealReading(state.shop,date):null;
   const duesOpen=num(ex.duesCash)||num(ex.duesUpi);
+  const bookOpen=cashInHand(state.shop,addDays(date,-1));
+  const dayTx=txnsBetween(state.shop,date,date),cashPaid=r2(dayTx.filter(x=>x.mode==="Cash").reduce((a,x)=>a+num(x.amount),0));
+  let adjOn=ex.date?!!num(ex.cashAdj):true;
   p.innerHTML=`<div class="cols">
     <div class="card"><div class="card-head"><h2>Sales · ${esc(niceDate(date))}</h2>${ex.date?'<span class="pill ok">Saved</span>':'<span class="pill">Not entered</span>'}</div>
       <form class="f" id="saleForm" autocomplete="off">
         ${pos?`<div class="step">1 · POS reading</div>
-        <div class="row2">${field("s_posReading","POS sales reading (running total)",ex.posReading)}<label class="fl">Previous reading<input type="text" readonly id="s_prev" value="${prev?esc(rs(prev.r)+" · "+shortDate(prev.date)):"None yet"}"></label></div>
+        <div class="row2">${field("s_posReading","POS sales reading (optional)",ex.posReading)}<label class="fl">Previous reading${prev&&prev.auto?" (auto)":""}<input type="text" readonly id="s_prev" value="${prev?esc(rs(prev.r)+" · "+shortDate(prev.date)):"None yet"}"></label></div>
         <label class="tick"><input type="checkbox" id="s_posStart"${ex.posStart||(!prev&&!ex.date)?" checked":""}> Starting reading, or POS counter reset today</label>
         <div id="s_startOpts" class="f" hidden>
           <label class="tick"><input type="checkbox" id="s_posFull"${ex.posFull?" checked":""}> Whole reading is today's sale</label>
           ${field("s_posOpenUnpaid","Unpaid already inside this reading (opens unpaid account)",ex.posOpenUnpaid)}
         </div>
         <div class="step">2 · Split today's sale</div>`:`<div class="step">1 · Today's sale</div>`}
-        <div class="row2">${field("s_total",pos?"Today's sale (from POS)":"Total sale",pos&&hasVal(ex.posReading)?"":ex.total,pos?"readonly":"")}${field("s_ret","Sale return",ex.ret)}</div>
+        <div class="row2">${field("s_total",pos?"Today's sale":"Total sale",pos&&hasVal(ex.posReading)?"":ex.total,pos?"readonly":"")}${field("s_ret","Sale return",ex.ret)}</div>
         <div class="row2">${field("s_cash","Cash",ex.cash)}${field("s_upi","UPI",ex.upi)}</div>
         <div class="row2">${field("s_unpaid","Unpaid (udhaar)",ex.unpaid)}<label class="fl">&nbsp;<button class="btn ghost small" type="button" id="fillCash">Rest is cash</button></label></div>
         <details class="more"${duesOpen?" open":""}><summary>Old dues received today</summary>
           <div class="row2">${field("s_duesCash","Dues in cash",ex.duesCash)}${field("s_duesUpi","Dues by UPI",ex.duesUpi)}</div></details>
+        <div class="step">${pos?"3":"2"} · Cash box count</div>
+        <div class="row2">${field("s_openBox","Opening cash in box (counted)",ex.openBox,bookOpen!=null?`placeholder="Books: ${esc(String(bookOpen))}"`:"")}${field("s_closeBox","Closing cash in box (counted)",ex.closeBox)}</div>
+        <div id="s_box" class="f" style="gap:8px"></div>
         <label class="fl">Note<input type="text" id="s_note" value="${esc(ex.note||"")}" placeholder="Optional"></label>
         <div id="s_check" class="check"></div>
         <div class="actions">
@@ -792,14 +830,44 @@ function renderEntry(){
     if(pos&&hasVal($("#s_posReading").value)){
       const isStart=$("#s_posStart").checked||!prev,r=num($("#s_posReading").value);
       if(!isStart&&posDay()<0){c.className="check off";c.textContent="POS reading is "+rs(-posDay())+" lower than the previous one. If the counter was reset, tick the box above.";return diff}
-      msg=isStart?(n?"Today's sale (whole reading): "+rs(n)+". ":"Starting reading saved as the base. "+(num($("#s_posOpenUnpaid").value)?rs(num($("#s_posOpenUnpaid").value))+" opens the unpaid account. ":"")):"POS "+rs(r)+" − "+rs(prev.r)+" = today's sale "+rs(n)+". ";
+      msg=isStart?(n?"Today's sale (whole reading): "+rs(n)+". ":"Starting reading saved as the base. "+(num($("#s_posOpenUnpaid").value)?rs(num($("#s_posOpenUnpaid").value))+" opens the unpaid account. ":"")):"POS "+rs(r)+" − "+rs(prev.r)+(prev.auto?" (auto)":"")+" = today's sale "+rs(n)+". ";
+      if(!isStart&&prev.auto&&realPrev) msg+="Matched with POS: since the real reading of "+rs(realPrev.r)+" on "+shortDate(realPrev.date)+", sales you entered on the days between added up to "+rs(r2(prev.r-realPrev.r))+", so any POS difference lands on today. ";
+    }else if(pos&&prev&&!hasVal($("#s_posReading").value)){
+      msg="No POS reading today. Auto reading = "+rs(prev.r)+" + today's sale "+rs(n)+" = "+rs(r2(prev.r+n))+". Type the real reading on any day to match. ";
     }
-    if(!n&&!got){c.className="check";c.textContent=msg||(pos?"Enter today's POS reading. Today's sale = this reading − previous reading.":"Enter today's total sale and how it was received.");return 0}
+    if(!n&&!got){c.className="check";c.textContent=msg||(pos?"Type today's POS reading, or skip it and enter today's sale. The app keeps an auto reading and matches it whenever you type a real one.":"Enter today's total sale and how it was received.");return 0}
     if(diff===0){cls="ok";msg+="Tallies: cash + UPI + unpaid = "+rs(n)+"."}
     else{cls="off";msg+=(diff>0?"Short by ":"Over by ")+rs(Math.abs(diff))+": cash + UPI + unpaid = "+rs(got)+", sale is "+rs(n)+"."}
     c.className="check "+cls;c.textContent=msg;return diff;
   }
+  /* Cash box: counted opening + cash in − cash out = expected; counted closing vs expected = surplus / short */
+  function boxCalc(){
+    const el=$("#s_box"),ov=$("#s_openBox").value,cv=$("#s_closeBox").value;
+    if(!hasVal(ov)&&!hasVal(cv)){el.innerHTML=`<p class="muted small" style="margin:0">Count the cash in the box when you open and when you close. The app shows any surplus or short and can adjust the books to match.</p>`;return null}
+    const open=hasVal(ov)?num(ov):(bookOpen!=null?bookOpen:0),cin=r2(num($("#s_cash").value)+num($("#s_duesCash").value)),exp=r2(open+cin-cashPaid);
+    const openDiff=bookOpen!=null&&hasVal(ov)?r2(open-bookOpen):0;
+    let h=`<div class="boxcalc">
+      ${bookOpen!=null?`<div class="ln muted"><span>Book opening (yesterday's closing)</span><span class="num">${rs(bookOpen)}</span></div>`:""}
+      <div class="ln"><span>Opening in box${hasVal(ov)?"":" (same as books)"}</span><span class="num">${rs(open)}</span></div>
+      <div class="ln"><span>+ Cash sale${num($("#s_duesCash").value)?" + dues in cash":""}</span><span class="num">${rs(cin)}</span></div>
+      <div class="ln"><span>− Cash paid out today</span><span class="num">${rs(cashPaid)}</span></div>
+      <div class="ln tot"><span>Should be in box</span><span class="num">${rs(exp)}</span></div>
+      ${hasVal(cv)?`<div class="ln tot"><span>Counted at closing</span><span class="num">${rs(num(cv))}</span></div>`:""}</div>`;
+    if(openDiff) h+=`<div class="boxres ${openDiff>0?"up":"down"}">Opening box is ${openDiff>0?"more":"less"} than the books by ${rs(Math.abs(openDiff))}</div>`;
+    let adj=0;
+    if(hasVal(cv)){
+      const d=r2(num(cv)-exp);
+      h+=d===0?`<div class="boxres ok">Box matches ✓</div>`:`<div class="boxres ${d>0?"up":"down"}">${d>0?"Surplus (extra)":"Short"} ${rs(Math.abs(d))} at closing</div>`;
+      adj=bookOpen!=null?r2(num(cv)-(bookOpen+cin-cashPaid)):0;
+      if(adj) h+=`<label class="tick"><input type="checkbox" id="s_adj"${adjOn?" checked":""}> Adjust books by ${adj>0?"+":"−"}${rs(Math.abs(adj))} so galla cash = counted cash</label>`;
+      else if(bookOpen==null) h+=`<p class="muted small" style="margin:0">Set opening balances in Settings to let the app adjust the books.</p>`;
+    }
+    el.innerHTML=h;
+    const ck=$("#s_adj");if(ck)ck.onchange=()=>{adjOn=ck.checked};
+    return {open:hasVal(ov)?open:null,close:hasVal(cv)?num(cv):null,adj};
+  }
   form.addEventListener("input",update);form.addEventListener("change",update);update();
+  form.addEventListener("input",boxCalc);boxCalc();
   $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_unpaid").value)));update()};
   form.onsubmit=async e=>{e.preventDefault();
     const diff=update("keep");
@@ -810,6 +878,8 @@ function renderEntry(){
     if(pos){const v=$("#s_posReading").value;entry.posReading=v===""?null:num(v);const isStart=($("#s_posStart").checked||!prev)&&v!=="";
       entry.posStart=isStart;entry.posFull=isStart&&$("#s_posFull").checked;entry.posOpenUnpaid=isStart?num($("#s_posOpenUnpaid").value):0;}
     if(!isOwnerU()&&salesBetween(state.shop,date,date)[0]){toast("This day is already saved. Only the owner can change it.");render();return}
+    const bx=boxCalc();
+    entry.openBox=bx?bx.open:null;entry.closeBox=bx?bx.close:null;entry.cashAdj=bx&&adjOn?bx.adj:0;
     entry.by=ex.by||me().name;if(ex.date)entry.editedBy=me().name;
     await saveSale(date,entry);
   };
@@ -818,6 +888,8 @@ function renderEntry(){
   p.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.tab="payments";state.pay.editId=b.dataset.edit;render()});
 }
 
+function boxRows(date){const s=salesBetween(state.shop,date,date)[0];if(!s||(!hasVal(s.openBox)&&!hasVal(s.closeBox)))return "";
+  return `${hasVal(s.openBox)?`<tr class="bf"><td>Box counted at opening</td><td class="num r">${rs(s.openBox)}</td></tr>`:""}${hasVal(s.closeBox)?`<tr class="bf"><td>Box counted at closing</td><td class="num r">${rs(s.closeBox)}</td></tr>`:""}`}
 function dayLedger(date){
   const tx=txnsBetween(state.shop,date,date),t=totals(state.shop,date,date);
   const yd=addDays(date,-1),oc=cashInHand(state.shop,yd),ob=bankBalance(state.shop,yd),od=outstanding(state.shop,yd);
@@ -832,7 +904,9 @@ function dayLedger(date){
     <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
     ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
     ${cashTx.map(txRow).join("")}
+    ${t.cashAdj?`<tr><td>Cash box adjustment (${t.cashAdj>0?"surplus":"short"})</td><td class="num r">${t.cashAdj>0?"+":"−"} ${rs(Math.abs(t.cashAdj))}</td></tr>`:""}
     <tr class="total"><td>Cash that should be in galla</td><td class="num r">${f(cc)}</td></tr>
+    ${boxRows(date)}
     ${bankTx.length?`<tr><th colspan="2">Paid by UPI / bank</th></tr>${bankTx.map(txRow).join("")}`:""}
   </tbody></table></div>`;
   return `<div class="tbl-wrap"><table class="ledger"><tbody>
@@ -841,7 +915,9 @@ function dayLedger(date){
     <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
     ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
     ${cashTx.map(txRow).join("")}
+    ${t.cashAdj?`<tr><td>Cash box adjustment (${t.cashAdj>0?"surplus":"short"})</td><td class="num r">${t.cashAdj>0?"+":"−"} ${rs(Math.abs(t.cashAdj))}</td></tr>`:""}
     <tr class="total"><td>Closing cash</td><td class="num r">${f(cc)}</td></tr>
+    ${boxRows(date)}
     <tr><th colspan="2">UPI / bank</th></tr>
     <tr class="bf"><td>Opening</td><td class="num r">${f(ob)}</td></tr>
     <tr><td>UPI sale</td><td class="num r">+ ${rs(t.upi)}</td></tr>
@@ -1276,7 +1352,7 @@ function renderAccounts(){
     const sm=Object.fromEntries(salesBetween(shop,from,to).map(s=>[s.date,s]));
     const dates=new Set(Object.keys(sm));txnsBetween(shop,from,to).forEach(x=>dates.add(x.date));
     [...dates].sort().forEach(d=>{const s=sm[d];const iss=s?issuesOf(s):(pos?["No sales entry"]:[]);
-      rows.push({key:d,label:shortDate(d),end:d,t:totals(shop,d,d),iss,reading:s&&hasVal(s.posReading)?num(s.posReading):null})});
+      rows.push({key:d,label:shortDate(d),end:d,t:totals(shop,d,d),iss,reading:s?readingOf(s):null})});
   }
   const shown=af.issues?rows.filter(r=>r.iss.length):rows;
   const T=totals(shop,from,to),bal=d=>({cash:cashInHand(shop,d),bank:bankBalance(shop,d),due:outstanding(shop,d)});
@@ -1291,7 +1367,7 @@ function renderAccounts(){
     </div>
     ${shown.length?`<div class="tbl-wrap"><table><thead><tr><th>${group==="day"?"Date":"Month"}</th>${showPos?'<th class="r">POS reading</th>':""}<th class="r">Net sale</th><th class="r">Cash</th><th class="r">UPI</th><th class="r">Unpaid</th><th class="r">Return</th><th class="r">Dues recd.</th><th class="r">Expense</th><th class="r">Salary</th><th class="r">Party</th><th class="r bal">Galla cash</th><th class="r bal">UPI / bank</th><th class="r bal">Unpaid due</th><th>Check</th></tr></thead><tbody>
     <tr class="bf"><td>Brought forward</td>${showPos?"<td></td>":""}<td colspan="9"></td><td class="num r bal">${f(o.cash)}</td><td class="num r bal">${f(o.bank)}</td><td class="num r bal">${rs(o.due)}</td><td></td></tr>
-    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading)}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
+    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading.r)+(r.reading.auto?' <span class="pill">auto</span>':"")}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
     ${af.issues?"":`<tr class="total"><td>Total</td>${showPos?"<td></td>":""}<td class="num r">${rs(T.net)}</td><td class="num r">${rs(T.cash)}</td><td class="num r">${rs(T.upi)}</td><td class="num r">${rs(T.unpaid+T.openUnpaid)}</td><td class="num r">${rs(T.ret)}</td><td class="num r">${rs(T.dues)}</td><td class="num r">${rs(T.expense)}</td><td class="num r">${rs(T.salary)}</td><td class="num r">${rs(T.party)}</td><td class="num r bal">${f(c.cash)}</td><td class="num r bal">${f(c.bank)}</td><td class="num r bal">${rs(c.due)}</td><td></td></tr>`}
     </tbody></table></div>
     <p class="muted small" style="margin:10px 0 0">Tap a ${group==="day"?"day to open its entry":"month to see its days"}. Balances carry forward from the row above.</p>`:`<p class="empty">${af.issues?"Nothing needs checking in "+esc(periodLabel())+".":"No entries for "+esc(periodLabel())+" yet."}</p>`}
@@ -1310,20 +1386,20 @@ function renderAccounts(){
 async function exportCsv(from,to){
   const shopName=(curShop()||{}).name||"shop";
   const q=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const lines=[["Date","Kind","Name / category","Detail","Paid by","POS reading","Total sale","Return","Net sale","Cash","UPI","Unpaid","Dues cash","Dues UPI","Payment amount","Galla cash","UPI / bank","Unpaid due","Note"].join(",")];
+  const lines=[["Date","Kind","Name / category","Detail","Paid by","POS reading","Total sale","Return","Net sale","Cash","UPI","Unpaid","Dues cash","Dues UPI","Payment amount","Galla cash","UPI / bank","Unpaid due","Box opening","Box closing","Cash adjustment","Note"].join(",")];
   const dates=new Set();salesBetween(state.shop,from,to).forEach(s=>dates.add(s.date));txnsBetween(state.shop,from,to).forEach(x=>dates.add(x.date));
   for(const d of [...dates].sort()){
     const s=salesBetween(state.shop,d,d)[0];
-    if(s) lines.push([d,"Sales","","","",s.posReading,s.total,s.ret,r2(num(s.total)-num(s.ret)),s.cash,s.upi,s.unpaid,s.duesCash,s.duesUpi,"","","","",s.note].map(q).join(","));
-    for(const x of txnsBetween(state.shop,d,d)) lines.push([d,TYPE[x.type].label,x.name,x.sub,x.mode,"","","","","","","","","",x.amount,"","","",x.note].map(q).join(","));
-    lines.push([d,"Closing balance","","","","","","","","","","","","","",cashInHand(state.shop,d),bankBalance(state.shop,d),outstanding(state.shop,d),""].map(q).join(","));
+    if(s) lines.push([d,"Sales","","","",s.posReading,s.total,s.ret,r2(num(s.total)-num(s.ret)),s.cash,s.upi,s.unpaid,s.duesCash,s.duesUpi,"","","","",s.openBox??"",s.closeBox??"",s.cashAdj||"",s.note].map(q).join(","));
+    for(const x of txnsBetween(state.shop,d,d)) lines.push([d,TYPE[x.type].label,x.name,x.sub,x.mode,"","","","","","","","","",x.amount,"","","","","","",x.note].map(q).join(","));
+    lines.push([d,"Closing balance","","","","","","","","","","","","","",cashInHand(state.shop,d),bankBalance(state.shop,d),outstanding(state.shop,d),"","","",""].map(q).join(","));
   }
   saveFile(`${slug(shopName)}-cashbook-${from}-to-${to}.csv`,"\ufeff"+lines.join("\n"),"text/csv");
 }
 
 /* ---------- Settings ---------- */
 function shopRowHtml(s,i,cur){return `<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label>
-  <div class="swatches" role="group" aria-label="Colour for ${esc(s.name)}">${PKEYS.map(k=>`<button type="button" data-i="${i}" data-c="${k}" title="${PALETTE[k].n}" aria-label="${PALETTE[k].n}" aria-pressed="${k===cur}" style="background:${PALETTE[k].l[0]}"></button>`).join("")}</div></div>`}
+  <div class="swatches" role="group" aria-label="Colour for ${esc(s.name)}">${PKEYS.map(k=>`<button type="button" data-i="${i}" data-c="${k}" title="${PALETTE[k].n}" aria-label="${PALETTE[k].n}" aria-pressed="${k===cur}" style="background:linear-gradient(135deg,${PALETTE[k].l[0]},${PALETTE[k].l[1]})"></button>`).join("")}</div><span class="swname muted small">${esc(PALETTE[cur].n)}</span></div>`}
 function renderSettings(){
   const p=$("#panel"),shops=settings.shops||[],o=(settings.opening||{})[state.shop]||{};
   p.innerHTML=`<div class="cols">
@@ -1398,10 +1474,10 @@ function renderSettings(){
   };
   const pending=shops.map(s=>({...s}));
   $("#addShop").onclick=()=>{const n=$("#newShop").value.trim();if(!n)return;let id=slug(n),k=2;while(pending.find(s=>s.id===id))id=slug(n)+"-"+(k++);pending.push({id,name:n});
-    pending[pending.length-1].color=PKEYS[(pending.length-1)%PKEYS.length];
+    pending[pending.length-1].color=DEFAULT_ORDER[(pending.length-1)%DEFAULT_ORDER.length];
     $("#shopList").insertAdjacentHTML("beforeend",shopRowHtml(pending[pending.length-1],pending.length-1,pending[pending.length-1].color));wireSwatches();$("#newShop").value=""};
   function wireSwatches(){document.querySelectorAll("#shopList .swatches button").forEach(b=>b.onclick=()=>{const i=+b.dataset.i,s=pending[i];if(!s)return;s.color=b.dataset.c;
-    b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));if(s.id===state.shop)applyTheme(s.color)})}
+    b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));const nm=b.closest(".it").querySelector(".swname");if(nm)nm.textContent=PALETTE[s.color].n;if(s.id===state.shop)applyTheme(s.color)})}
   pending.forEach(s=>{if(!s.color)s.color=shopColor(s.id)});wireSwatches();
   $("#saveShops").onclick=async()=>{
     document.querySelectorAll("#shopList input[type=text]").forEach(i=>{const s=pending[+i.dataset.i];if(s&&i.value.trim())s.name=i.value.trim()});

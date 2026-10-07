@@ -52,7 +52,15 @@ header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .brand h1{font-size:21px;letter-spacing:-.01em}
 nav.tabs{display:flex;gap:2px;overflow-x:auto;max-width:100%}
 nav.tabs button{border:0;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-radius:6px;white-space:nowrap;font-weight:500}
-nav.tabs button[aria-selected=true]{background:var(--ink);color:var(--bg)}
+nav.tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
+header.bar{border-top:4px solid var(--accent);background:color-mix(in srgb,var(--accent-soft) 55%,var(--bg))}
+#shopSel{border:2px solid var(--accent);border-radius:8px;font-weight:600;color:var(--accent);background:var(--paper);padding:6px 10px}
+.swatches{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.swatches button{width:28px;height:28px;border-radius:50%;border:2px solid var(--paper);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.swatches button[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
+.shoplist .it{flex-wrap:wrap}
+.scalebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:10px}
+.scalebar .link{color:var(--accent)}
 
 .filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
 .quick{display:flex;flex-wrap:wrap;gap:6px}
@@ -281,7 +289,38 @@ function lastDay(y,m){return new Date(y,m,0).getDate()}
 function daysBetween(a,b){return Math.round((parse(b)-parse(a))/864e5)}
 const inr=new Intl.NumberFormat("en-IN",{minimumFractionDigits:0,maximumFractionDigits:2});
 function r2(v){return Math.round((+v||0)*100)/100}
-function rs(n){n=r2(n);return (n<0?"−₹":"₹")+inr.format(Math.abs(n))}
+let SCALE=1,scaleOff=false;
+function rs(n){n=r2(n);if(SCALE>1)n=Math.round(n/SCALE*100)/100;return (n<0?"−₹":"₹")+inr.format(Math.abs(n))}
+/* Number view: show amounts ÷100 or ÷1000 for a date range (display only, saved data never changes) */
+function scaleFor(){
+  const nv=settings.numview;if(!nv||!(nv.div>1)||scaleOff)return 1;
+  if(state.tab==="entry"||state.tab==="settings")return 1;
+  const f=state.from,t=state.to;
+  if(nv.from&&nv.to&&(t<nv.from||f>nv.to))return 1;
+  return nv.div;
+}
+const SCALE_NAME={100:"hundreds (÷100)",1000:"thousands (÷1000)"};
+/* Each business gets its own colour */
+const PALETTE={
+  maroon:{n:"Maroon",l:["#8e1f34","#f6e6e9"],d:["#e2768a","#3a1d24"]},
+  teal:{n:"Teal",l:["#0f6b6b","#dff1f0"],d:["#5cc8c2","#12302f"]},
+  blue:{n:"Blue",l:["#1f4fa3","#e4ecf9"],d:["#7ea8f0","#172a47"]},
+  green:{n:"Green",l:["#2f6b2a","#e5f1e2"],d:["#7fcb74","#1a2f18"]},
+  purple:{n:"Purple",l:["#5b2d91","#eee6f7"],d:["#b48cf0","#2b1f3d"]},
+  orange:{n:"Orange",l:["#a24a0c","#fbebdd"],d:["#f0a15f","#3a2616"]},
+  pink:{n:"Pink",l:["#a8246b","#f8e3ef"],d:["#f07ab8","#3b1a2c"]},
+  slate:{n:"Slate",l:["#33475b","#e6ebf0"],d:["#9db3c8","#1f2a35"]}};
+const PKEYS=Object.keys(PALETTE);
+function shopColor(id){const shops=settings.shops||[],i=shops.findIndex(s=>s.id===id);if(i<0)return "maroon";return PALETTE[shops[i].color]?shops[i].color:PKEYS[i%PKEYS.length]}
+const darkMQ=matchMedia("(prefers-color-scheme: dark)");
+function applyTheme(key){
+  key=key||(state.shop?shopColor(state.shop):"maroon");applyTheme.cur=key;
+  const root=document.documentElement,t=root.dataset.theme,dark=t==="dark"||(t!=="light"&&darkMQ.matches);
+  const [a,soft]=PALETTE[key][dark?"d":"l"];
+  root.style.setProperty("--accent",a);root.style.setProperty("--accent-soft",soft);root.style.setProperty("--accent-ink",dark?"#10141a":"#ffffff");
+  const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=dark?"#121615":a;
+}
+darkMQ.addEventListener&&darkMQ.addEventListener("change",()=>applyTheme(applyTheme.cur));
 function num(v){const n=parseFloat(v);return isFinite(n)?r2(n):0}
 function hasVal(v){return v!==undefined&&v!==null&&v!==""}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
@@ -453,7 +492,10 @@ function render(){
   $("#shopSel").disabled=shops.length<2;
   if(!owner&&!state.shop){$("#panel").innerHTML=`<div class="card"><h2>No shop assigned</h2><p class="muted">Ask the owner to give your login a shop in Settings.</p></div>`;return}
   document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===state.tab)));
+  applyTheme();SCALE=scaleFor();
   renderFilter();renderDatalists();renderSummary();
+  if(SCALE>1){const nv=settings.numview;$("#summary").insertAdjacentHTML("afterbegin",`<div class="scalebar"><span>Amounts in ${SCALE_NAME[SCALE]}${nv.from&&nv.to?" · "+esc(shortDate(nv.from))+" – "+esc(shortDate(nv.to)):""}</span><button class="link" id="scaleOff">Show full ₹</button></div>`);$("#scaleOff").onclick=()=>{scaleOff=true;render()}}
+  else if(scaleOff&&settings.numview&&settings.numview.div>1&&state.tab!=="entry"&&state.tab!=="settings"){$("#summary").insertAdjacentHTML("afterbegin",`<div class="scalebar"><span>Showing full ₹</span><button class="link" id="scaleOn">Show in ${SCALE_NAME[settings.numview.div]}</button></div>`);$("#scaleOn").onclick=()=>{scaleOff=false;render()}}
   const p=$("#panel");
   if(!state.shop&&state.tab!=="settings"){p.innerHTML=`<div class="card"><h2>Add your first shop</h2><p class="muted">Open Settings and add the shop you keep a cash book for.</p><button class="btn" id="goSet">Open Settings</button></div>`;$("#goSet").onclick=()=>{state.tab="settings";render()};return}
   const pend=owner&&state.shop?allPurchases(state.shop).filter(x=>x.reviewPending).length:0;
@@ -580,6 +622,32 @@ function writeHeads(type,list,hidden,quiet){
   return write(async()=>{await db.doc("settings/main").update({heads:all})},quiet?false:"Heads saved");
 }
 const HEAD_WORD={expense:"head",salary:"staff",party:"party",partyall:"party"};
+/* Settings → Number view */
+function renderNumView(){
+  const el=$("#numCard");if(!el)return;
+  const nv=settings.numview||{div:1},sel={div:nv.div||1,range:!!(nv.from&&nv.to),from:nv.from||state.from,to:nv.to||state.to};
+  const draw=()=>{
+    el.innerHTML=`<h2 style="margin-bottom:6px">Number view</h2>
+    <p class="muted small" style="margin-top:0">Show big amounts smaller for an easier view: ₹15,200 shows as ₹152 (÷100) or ₹15.2 (÷1000). Only the display changes. Saved entries, Daily entry, CSV and backups always stay in full rupees.</p>
+    <form class="f" id="nvForm">
+      <div class="seg" role="group" aria-label="Divide by">${[[1,"Full ₹"],[100,"÷ 100"],[1000,"÷ 1000"]].map(([v,l])=>`<button type="button" data-div="${v}" aria-pressed="${sel.div===v}">${l}</button>`).join("")}</div>
+      <div ${sel.div>1?"":"hidden"}>
+        <div class="seg" role="group" aria-label="Dates" style="margin:8px 0">${[[false,"All dates"],[true,"Date range"]].map(([v,l])=>`<button type="button" data-rg="${v}" aria-pressed="${sel.range===v}">${l}</button>`).join("")}</div>
+        <div class="row2" ${sel.range?"":"hidden"}><label class="fl">From<input type="date" id="nv_from" value="${esc(sel.from)}"></label><label class="fl">To<input type="date" id="nv_to" value="${esc(sel.to)}"></label></div>
+        <p class="muted small" style="margin:6px 0 0">Example: ₹1,25,450 shows as ${sel.div===100?"₹1,254.5":"₹125.45"}.${sel.range?" Applies when the period you're viewing falls in these dates.":""}</p>
+      </div>
+      <div class="actions"><button class="btn" type="submit">Save number view</button></div>
+    </form>`;
+    el.querySelectorAll("[data-div]").forEach(b=>b.onclick=()=>{keep();sel.div=+b.dataset.div;draw()});
+    el.querySelectorAll("[data-rg]").forEach(b=>b.onclick=()=>{keep();sel.range=b.dataset.rg==="true";draw()});
+    $("#nvForm").onsubmit=async e=>{e.preventDefault();keep();
+      let {from,to}=sel;if(sel.range){if(!from||!to){toast("Pick both dates");return}if(from>to)[from,to]=[to,from]}
+      const numview=sel.div>1?{div:sel.div,from:sel.range?from:"",to:sel.range?to:""}:{div:1};
+      scaleOff=false;await saveSettings({...settings,numview});};
+  };
+  const keep=()=>{const f=$("#nv_from"),t=$("#nv_to");if(f){sel.from=f.value;sel.to=t.value}};
+  draw();
+}
 /* Settings → Heads: add, rename (also fixes old entries), remove from suggestions */
 let headsTab="expense";
 function renderHeads(){
@@ -1254,14 +1322,16 @@ async function exportCsv(from,to){
 }
 
 /* ---------- Settings ---------- */
+function shopRowHtml(s,i,cur){return `<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label>
+  <div class="swatches" role="group" aria-label="Colour for ${esc(s.name)}">${PKEYS.map(k=>`<button type="button" data-i="${i}" data-c="${k}" title="${PALETTE[k].n}" aria-label="${PALETTE[k].n}" aria-pressed="${k===cur}" style="background:${PALETTE[k].l[0]}"></button>`).join("")}</div></div>`}
 function renderSettings(){
   const p=$("#panel"),shops=settings.shops||[],o=(settings.opening||{})[state.shop]||{};
   p.innerHTML=`<div class="cols">
     <div class="card"><h2 style="margin-bottom:12px">Businesses / shops</h2>
-      <div class="shoplist" id="shopList">${shops.map((s,i)=>`<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label></div>`).join("")}</div>
+      <div class="shoplist" id="shopList">${shops.map((s,i)=>shopRowHtml(s,i,shopColor(s.id))).join("")}</div>
       <div class="actions" style="margin-top:10px"><input type="text" id="newShop" placeholder="New shop name" style="flex:1"><button class="btn ghost small" id="addShop">Add</button></div>
       <div class="actions" style="margin-top:12px"><button class="btn" id="saveShops"${canWrite?"":" disabled"}>Save shops</button></div>
-      <p class="muted small">Each shop keeps separate books. Match POS works out each day's sale from the POS running total.</p>
+      <p class="muted small">Each shop keeps separate books and its own colour, so you can see at a glance which shop you're in. Match POS works out each day's sale from the POS running total.</p>
     </div>
     <div class="card"><h2 style="margin-bottom:6px">Opening balances · ${esc((curShop()||{}).name||"")}</h2>
       <p class="muted small" style="margin-top:0">Count the galla cash and check the UPI / bank balance once. Every entry from this date on is added or taken out to give running balances.</p>
@@ -1292,12 +1362,13 @@ function renderSettings(){
         <p class="muted small" style="margin:10px 0 0">Entries sync live on every device that has this page open. Each device stays logged in until someone taps Log out.</p>
       </div>
     </div>
+    <div class="card" id="numCard"></div>
     <div class="card" id="headsCard"></div>
     <div class="card"><h2 style="margin-bottom:6px">Backup</h2>
       <p class="muted small" style="margin-top:0">Download a full copy of all shops, logins, entries and bill photos once a week and keep it safe (Google Drive or WhatsApp to yourself). Restoring adds the file's records back and overwrites any with the same ID.</p>
       <div class="actions"><button class="btn ghost" id="bkDown">Download backup</button><label class="btn ghost" for="bkFile">Restore from backup file</label><input type="file" id="bkFile" accept="application/json,.json" hidden></div>
     </div>`;
-  renderHeads();
+  renderHeads();renderNumView();
   $("#bkDown").onclick=downloadBackup;
   $("#bkFile").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)restoreBackup(f)};
   const syncRole=()=>{$("#uf_shops").hidden=$("#uf_role").value==="owner"};
@@ -1327,7 +1398,11 @@ function renderSettings(){
   };
   const pending=shops.map(s=>({...s}));
   $("#addShop").onclick=()=>{const n=$("#newShop").value.trim();if(!n)return;let id=slug(n),k=2;while(pending.find(s=>s.id===id))id=slug(n)+"-"+(k++);pending.push({id,name:n});
-    $("#shopList").insertAdjacentHTML("beforeend",`<div class="it"><input type="text" value="${esc(n)}" data-i="${pending.length-1}"><label class="tick"><input type="checkbox" class="poschk" data-i="${pending.length-1}"> Match POS</label></div>`);$("#newShop").value=""};
+    pending[pending.length-1].color=PKEYS[(pending.length-1)%PKEYS.length];
+    $("#shopList").insertAdjacentHTML("beforeend",shopRowHtml(pending[pending.length-1],pending.length-1,pending[pending.length-1].color));wireSwatches();$("#newShop").value=""};
+  function wireSwatches(){document.querySelectorAll("#shopList .swatches button").forEach(b=>b.onclick=()=>{const i=+b.dataset.i,s=pending[i];if(!s)return;s.color=b.dataset.c;
+    b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));if(s.id===state.shop)applyTheme(s.color)})}
+  pending.forEach(s=>{if(!s.color)s.color=shopColor(s.id)});wireSwatches();
   $("#saveShops").onclick=async()=>{
     document.querySelectorAll("#shopList input[type=text]").forEach(i=>{const s=pending[+i.dataset.i];if(s&&i.value.trim())s.name=i.value.trim()});
     document.querySelectorAll("#shopList .poschk").forEach(i=>{const s=pending[+i.dataset.i];if(s)s.pos=i.checked});

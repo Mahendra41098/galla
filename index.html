@@ -421,18 +421,28 @@ function allSales(shop){
   for(const seg of segs){
     seg.forEach(e=>{e.posIsStart=false;e.eod=null;e.posDiff=0;e.posPrevAnchor=null});
     if(seg[0].posStart) seg[0].posIsStart=true;
-    const anchors=seg.map((e,i)=>hasVal(e.posReading)?i:-1).filter(i=>i>=0);
+    let anchors=seg.map((e,i)=>hasVal(e.posReading)?i:-1).filter(i=>i>=0);
+    /* "Machine is correct": a rebase reading overrides earlier readings from its from-date on;
+       those days are worked back from it using the bills (their typed reading is kept for reference) */
+    for(let j=seg.length-1;j>=0;j--){const B=seg[j];if(!B.posRebase||!hasVal(B.posReading)||!anchors.includes(j))continue;
+      const F=B.posRebaseFrom||seg[0].date;anchors=anchors.filter(i=>!(i<j&&seg[i].date>=F))}
+    seg.forEach((e,i)=>{e.posTyped=hasVal(e.posReading)&&!anchors.includes(i)?num(e.posReading):null;e.posJump=0});
     if(!anchors.length) continue;
     for(let i=0;i<seg.length;i++){
-      const nx=anchors.find(j=>j>=i);
+      let nx=anchors.find(j=>j>=i);
+      const pvA=anchors.filter(j=>j<i).pop();
+      // days before a rebase's from-date keep carrying forward from the older reading
+      if(nx!==undefined&&nx!==i&&seg[nx].posRebase&&pvA!==undefined&&seg[i].date<(seg[nx].posRebaseFrom||seg[0].date))nx=undefined;
       if(nx!==undefined){let v=num(seg[nx].posReading);for(let k=i+1;k<=nx;k++)v-=net(seg[k]);seg[i].eod=r2(v)}
       else{const pv=anchors.filter(j=>j<i).pop();let v=num(seg[pv].posReading);for(let k=pv+1;k<=i;k++)v+=net(seg[k]);seg[i].eod=r2(v)}
-      seg[i].eodAuto=!hasVal(seg[i].posReading);
+      seg[i].eodAuto=!anchors.includes(i);
     }
     for(let n=1;n<anchors.length;n++){
       const A=seg[anchors[n-1]],B=seg[anchors[n]];let exp=num(A.posReading);
       for(let k=anchors[n-1]+1;k<=anchors[n];k++)exp+=net(seg[k]);
-      B.posDiff=r2(num(B.posReading)-exp);B.posPrevAnchor={r:num(A.posReading),date:A.date};
+      const d=r2(num(B.posReading)-exp);
+      if(B.posRebase){B.posDiff=0;const F=B.posRebaseFrom||seg[0].date;let f=anchors[n-1]+1;while(f<anchors[n]&&seg[f].date<F)f++;if(d)seg[f].posJump=d}
+      else{B.posDiff=d;B.posPrevAnchor={r:num(A.posReading),date:A.date}}
     }
     seg.forEach((e,i)=>{e.posDay=net(e)});
   }
@@ -444,7 +454,7 @@ function allPurchases(shop){
   return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
 }
 function salesBetween(shop,from,to){return allSales(shop).filter(e=>e.date>=from&&e.date<=to)}
-function readingOf(e){return hasVal(e.eod)?{r:e.eod,date:e.date,auto:!!e.eodAuto,diff:e.posDiff||0}:null}
+function readingOf(e){return hasVal(e.eod)?{r:e.eod,date:e.date,auto:!!e.eodAuto,diff:e.posDiff||0,jump:e.posJump||0}:null}
 function prevReading(shop,date){let p=null;for(const e of allSales(shop)){if(e.date>=date)break;p=readingOf(e)||p}return p}
 function lastReading(shop,upto){let p=null;for(const e of allSales(shop)){if(e.date>upto)break;p=readingOf(e)||p}return p}
 function lastRealReading(shop,before){let p=null;for(const e of allSales(shop)){if(e.date>=before)break;if(hasVal(e.posReading))p={r:num(e.posReading),date:e.date}}return p}
@@ -805,6 +815,10 @@ function renderEntry(){
         ${pos?`<div class="step">2 · EOD POS reading</div>
         <div class="row2">${field("s_posReading","EOD POS reading (optional)",ex.posReading)}<label class="fl">Yesterday's EOD${prev&&prev.auto?" (auto)":""}<input type="text" readonly id="s_prev" value="${prev?esc(rs(prev.r)+" · "+shortDate(prev.date)):"None yet"}"></label></div>
         <div id="s_pos" class="check"></div>
+        <div id="s_rebaseBox" class="f" hidden style="gap:6px">
+          <label class="tick"><input type="checkbox" id="s_rebase"${ex.posRebase?" checked":""}> Machine is correct: set POS to this reading and re-work earlier days' EOD from the bills</label>
+          <label class="fl" id="s_rbFromL" hidden>Re-work days from<input type="date" id="s_rebaseFrom" value="${esc(ex.posRebaseFrom||"")}"></label>
+        </div>
         <label class="tick"><input type="checkbox" id="s_posStart"${ex.posStart?" checked":""}> POS counter reset today (start a new chain)</label>
         <div id="s_startOpts" class="f" hidden>${field("s_posOpenUnpaid","Unpaid already inside this reading (opens unpaid account)",ex.posOpenUnpaid)}</div>`:""}
         <div class="step">${pos?"3":"2"} · Cash box count</div>
@@ -838,17 +852,26 @@ function renderEntry(){
     const rv=$("#s_posReading");
     if(hasVal(v)){
       const r=num(v);
-      if(reset){el.className="check";el.textContent="Counter reset: a new POS chain starts at "+rs(r)+" today.";return}
-      let ai=-1;for(let i=before.length-1;i>=0;i--){if(hasVal(before[i].posReading)){ai=i;break}if(before[i].posStart)break}
+      if(reset){$("#s_rebaseBox").hidden=true;el.className="check";el.textContent="Counter reset: a new POS chain starts at "+rs(r)+" today.";return}
+      let cs=0;for(let i=before.length-1;i>=0;i--){if(before[i].posStart&&hasVal(before[i].posReading)){cs=i;break}}
+      const chainStart=before.length?before[cs].date:null;
+      const rbOn=$("#s_rebase").checked,fromIn=$("#s_rebaseFrom");
+      if(chainStart&&!fromIn.value)fromIn.value=chainStart;
+      const F=rbOn?(fromIn.value||chainStart):null;
+      let ai=-1;for(let i=before.length-1;i>=0;i--){if(hasVal(before[i].posReading)&&!(rbOn&&before[i].date>=F)){ai=i;break}if(before[i].posStart)break}
       const autos=ai<0?before.filter(e=>!hasVal(e.posReading)).length:before.length-1-ai;
       let txt="";
       if(ai>=0){
         const A=before[ai];let exp=num(A.posReading);for(let k=ai+1;k<before.length;k++)exp+=netOf(before[k]);exp=r2(exp+n);
         const d=r2(r-exp);
-        txt=d===0?"Matches bills ✓ POS "+rs(num(A.posReading))+" on "+shortDate(A.date)+" + bills since = "+rs(exp)+".":
-          "POS is "+rs(Math.abs(d))+(d>0?" more":" less")+" than bills since "+shortDate(A.date)+" (bills say "+rs(exp)+"). Check for a missing or extra bill.";
-        el.className="check "+(d===0?"ok":"off");
-      }else{el.className="check ok";txt="This becomes the POS base."}
+        if(rbOn){txt="POS set to "+rs(r)+". Days from "+shortDate(F)+" are re-worked from the bills"+(d?"; the "+(d>0?"+":"−")+rs(Math.abs(d))+" difference shows on "+shortDate(F)+".":".");el.className="check ok"}
+        else{txt=d===0?"Matches bills ✓ POS "+rs(num(A.posReading))+" on "+shortDate(A.date)+" + bills since = "+rs(exp)+".":
+          "Galla shows "+rs(exp)+" but POS says "+rs(r)+" ("+(d>0?"+":"−")+rs(Math.abs(d))+" vs bills since "+shortDate(A.date)+"). Check for a missing bill, or tick “Machine is correct” below.";
+        el.className="check "+(d===0?"ok":"off");}
+      }else{
+        el.className="check ok";txt=rbOn&&before.length?"POS set to "+rs(r)+". All earlier days from "+shortDate(F)+" are re-worked from the bills.":"This becomes the POS base."}
+      const hasEarlier=before.some(e=>hasVal(e.posReading));
+      $("#s_rebaseBox").hidden=!hasEarlier;$("#s_rbFromL").hidden=!rbOn;
       if(autos) txt+=" "+autos+" earlier day"+(autos>1?"s'":"'s")+" EOD reading will update to match.";
       const ni=after.findIndex(e=>hasVal(e.posReading)||e.posStart);
       if(ni>=0&&hasVal(after[ni].posReading)&&!after[ni].posStart){
@@ -857,6 +880,7 @@ function renderEntry(){
       }
       el.textContent=txt;return;
     }
+    $("#s_rebaseBox").hidden=true;
     // auto
     let ni=after.findIndex(e=>hasVal(e.posReading)||e.posStart);
     if(ni>=0&&hasVal(after[ni].posReading)&&!after[ni].posStart){
@@ -914,7 +938,8 @@ function renderEntry(){
       duesCash:num($("#s_duesCash").value),duesUpi:num($("#s_duesUpi").value),note:$("#s_note").value.trim(),total:num($("#s_total").value)};
     if(pos){const v=$("#s_posReading").value;entry.posReading=v===""?null:num(v);const isStart=$("#s_posStart").checked&&v!=="";
       if($("#s_posStart").checked&&v===""){toast("Type the POS reading for the counter reset");return}
-      entry.posStart=isStart;entry.posFull=false;entry.posOpenUnpaid=isStart?num($("#s_posOpenUnpaid").value):0;}
+      entry.posStart=isStart;entry.posFull=false;entry.posOpenUnpaid=isStart?num($("#s_posOpenUnpaid").value):0;
+      const rb=v!==""&&!isStart&&!$("#s_rebaseBox").hidden&&$("#s_rebase").checked;entry.posRebase=rb;entry.posRebaseFrom=rb?$("#s_rebaseFrom").value:"";}
     if(!isOwnerU()&&salesBetween(state.shop,date,date)[0]){toast("This day is already saved. Only the owner can change it.");render();return}
     const bx=boxCalc();
     entry.openBox=bx?bx.open:null;entry.closeBox=bx?bx.close:null;entry.cashAdj=bx&&adjOn?bx.adj:0;
@@ -1405,7 +1430,7 @@ function renderAccounts(){
     </div>
     ${shown.length?`<div class="tbl-wrap"><table><thead><tr><th>${group==="day"?"Date":"Month"}</th>${showPos?'<th class="r">EOD POS</th>':""}<th class="r">Net sale</th><th class="r">Cash</th><th class="r">UPI</th><th class="r">Unpaid</th><th class="r">Return</th><th class="r">Dues recd.</th><th class="r">Expense</th><th class="r">Salary</th><th class="r">Party</th><th class="r bal">Galla cash</th><th class="r bal">UPI / bank</th><th class="r bal">Unpaid due</th><th>Check</th></tr></thead><tbody>
     <tr class="bf"><td>Brought forward</td>${showPos?"<td></td>":""}<td colspan="9"></td><td class="num r bal">${f(o.cash)}</td><td class="num r bal">${f(o.bank)}</td><td class="num r bal">${rs(o.due)}</td><td></td></tr>
-    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading.r)+(r.reading.auto?' <span class="pill">auto</span>':' <span class="pill ok">POS</span>')}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
+    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading.r)+(r.reading.auto?' <span class="pill">auto</span>':' <span class="pill ok">POS</span>')+(r.reading.jump?` <span class="pill warn">POS set ${r.reading.jump>0?"+":"−"}${rs(Math.abs(r.reading.jump))}</span>`:"")}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
     ${af.issues?"":`<tr class="total"><td>Total</td>${showPos?"<td></td>":""}<td class="num r">${rs(T.net)}</td><td class="num r">${rs(T.cash)}</td><td class="num r">${rs(T.upi)}</td><td class="num r">${rs(T.unpaid+T.openUnpaid)}</td><td class="num r">${rs(T.ret)}</td><td class="num r">${rs(T.dues)}</td><td class="num r">${rs(T.expense)}</td><td class="num r">${rs(T.salary)}</td><td class="num r">${rs(T.party)}</td><td class="num r bal">${f(c.cash)}</td><td class="num r bal">${f(c.bank)}</td><td class="num r bal">${rs(c.due)}</td><td></td></tr>`}
     </tbody></table></div>
     <p class="muted small" style="margin:10px 0 0">Tap a ${group==="day"?"day to open its entry":"month to see its days"}. Balances carry forward from the row above.</p>`:`<p class="empty">${af.issues?"Nothing needs checking in "+esc(periodLabel())+".":"No entries for "+esc(periodLabel())+" yet."}</p>`}

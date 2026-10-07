@@ -248,6 +248,12 @@ nav.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--acce
 /* Daily entry balance strip */
 .balstrip{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .balcard{border-radius:14px;padding:12px 14px;color:#fff;display:grid;gap:2px;box-shadow:0 8px 20px -12px rgba(0,0,0,.5)}
+.hsum{display:grid;gap:6px;margin-top:8px}
+.hs{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit}
+.hs:hover{border-color:var(--accent)}
+.hs .hn{display:flex;gap:6px;align-items:center;min-width:0;overflow-wrap:anywhere}
+.hs .bar{grid-column:1/-1;height:6px;border-radius:99px;background:var(--soft);overflow:hidden}.hs .bar i{display:block;height:100%;border-radius:99px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
 .balcard.cash{background:var(--g-cash)}.balcard.bank{background:var(--g-bank)}
 .balcard .k{font-size:12px;font-weight:600;opacity:.9;letter-spacing:.02em}
 .balcard .v{font-family:var(--mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -335,7 +341,7 @@ async function hashPin(pin,salt){
 }
 function validPin(p){return /^\d{4,8}$/.test(p)}
 let state={shop:null,tab:"entry",entryDate:todayStr(),preset:"thismonth",unit:"month",from:"",to:"",
-  pay:{type:"expense",editId:null},pf:{type:"all",mode:"all",q:""},af:{group:"auto",issues:false}};
+  pay:{type:"expense",editId:null},pf:{type:"all",mode:"all",q:"",name:"all",sub:"all"},paf:{status:"all",sort:"bal"},plf:{kind:"all",mode:"all",period:"all"},af:{group:"auto",issues:false}};
 try{const s=JSON.parse(localStorage.getItem("galla-ui2")||"{}");if(s.tab)state.tab=s.tab;if(s.shop)state.shop=s.shop;if(s.preset&&s.preset!=="custom")state.preset=s.preset;}catch(e){}
 setPreset(state.preset,true);
 function saveUi(){try{localStorage.setItem("galla-ui2",JSON.stringify({tab:state.tab,shop:state.shop,preset:state.preset}))}catch(e){}}
@@ -1067,9 +1073,16 @@ function renderPayments(){
   if(pf.type!=="all") list=list.filter(x=>x.type===pf.type);
   if(pf.mode!=="all") list=list.filter(x=>pf.mode==="Cash"?x.mode==="Cash":x.mode!=="Cash");
   if(pf.q){const q=pf.q.toLowerCase();list=list.filter(x=>[x.name,x.sub,x.note,String(x.amount)].some(v=>String(v||"").toLowerCase().includes(q)))}
+  /* name / category filter: choices come from every name used for the chosen type */
+  const nameOpts={};txnsBetween(state.shop,"0000","9999").filter(x=>pf.type==="all"||x.type===pf.type).forEach(x=>{if(x.name){const k=x.type+"|"+pkey(x.name);nameOpts[k]=nameOpts[k]||{k,type:x.type,name:x.name}}});
+  if(pf.name!=="all"&&!nameOpts[pf.name])pf.name="all";
+  if(pf.name!=="all"){const [ty,nk]=pf.name.split("|");list=list.filter(x=>x.type===ty&&pkey(x.name)===nk)}
+  if(pf.type==="salary"&&pf.sub!=="all")list=list.filter(x=>(x.sub||"Salary")===pf.sub);
   const total=r2(list.reduce((a,x)=>a+num(x.amount),0));
   const byType={};list.forEach(x=>byType[x.type]=r2((byType[x.type]||0)+num(x.amount)));
-  const byName={};list.forEach(x=>{const k=x.name||"—";byName[k]=r2((byName[k]||0)+num(x.amount))});
+  const byName={};list.forEach(x=>{const k=x.type+"|"+pkey(x.name||"—");const o=byName[k]||(byName[k]={k,type:x.type,name:x.name||"—",n:0,amt:0});o.n++;o.amt=r2(o.amt+num(x.amount))});
+  const heads=Object.values(byName).sort((a,b)=>b.amt-a.amt),maxAmt=heads.length?heads[0].amt:0;
+  const TCOL={expense:"var(--c-exp)",salary:"var(--c-sal)",party:"var(--c-party)"};
   p.innerHTML=`<div class="cols">
     <div class="card"><div class="card-head"><h2>${editing?"Edit payment":"Add payment"}</h2>${editing?'<button class="link" id="cancelEdit">Cancel edit</button>':""}</div>
       <form class="f" id="txForm" autocomplete="off">
@@ -1089,11 +1102,15 @@ function renderPayments(){
       <div class="tools">
         <select id="f_type" aria-label="Type"><option value="all">All types</option>${Object.entries(TYPE).map(([k,v])=>`<option value="${k}"${pf.type===k?" selected":""}>${v.label}</option>`).join("")}</select>
         <select id="f_mode" aria-label="Paid by"><option value="all">Cash + UPI/bank</option><option value="Cash"${pf.mode==="Cash"?" selected":""}>Cash only</option><option value="bank"${pf.mode==="bank"?" selected":""}>UPI / bank only</option></select>
+        <select id="f_name" aria-label="Name or category"><option value="all">${pf.type==="expense"?"All categories":pf.type==="salary"?"All staff":pf.type==="party"?"All parties":"All names / categories"}</option>${Object.values(nameOpts).sort((a,b)=>a.type.localeCompare(b.type)||a.name.localeCompare(b.name)).map(o=>`<option value="${esc(o.k)}"${pf.name===o.k?" selected":""}>${pf.type==="all"?esc(TYPE[o.type].label)+" · ":""}${esc(o.name)}</option>`).join("")}</select>
+        ${pf.type==="salary"?`<select id="f_sub" aria-label="Salary type"><option value="all">Salary + advance + bonus</option>${TYPE.salary.sub.opts.map(o=>`<option${pf.sub===o?" selected":""}>${o}</option>`).join("")}</select>`:""}
         <input type="search" id="f_q" placeholder="Search name, bill, note, amount" value="${esc(pf.q)}">
+        ${pf.type!=="all"||pf.mode!=="all"||pf.q||pf.name!=="all"||pf.sub!=="all"?`<button class="link" id="f_clear">Clear filters</button>`:""}
       </div>
       <div class="chips" style="margin-bottom:12px"><span class="chip">Total <b>${rs(total)}</b></span><span class="chip">${list.length} entr${list.length===1?"y":"ies"}</span>
         ${Object.entries(byType).map(([k,v])=>`<span class="chip">${esc(TYPE[k].label)} <b>${rs(v)}</b></span>`).join("")}</div>
-      ${Object.keys(byName).length>1?`<details class="more" style="margin-bottom:12px"><summary>Totals by name / category</summary><div class="chips">${Object.entries(byName).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="chip">${esc(k)} <b>${rs(v)}</b></span>`).join("")}</div></details>`:""}
+      ${heads.length>1?`<details class="more" open style="margin-bottom:12px"><summary>${pf.type==="expense"?"Category-wise":pf.type==="party"?"Party-wise":pf.type==="salary"?"Staff-wise":"Name-wise"} totals · tap one to filter</summary>
+        <div class="hsum">${heads.map(h=>`<button type="button" class="hs" data-head="${esc(h.k)}"><span class="hn">${pf.type==="all"?`<span class="dot" style="background:${TCOL[h.type]}"></span>`:""}${esc(h.name)} <span class="muted small">${h.n}×</span></span><span class="num">${rs(h.amt)}</span><span class="bar"><i style="width:${maxAmt?Math.max(3,h.amt/maxAmt*100):0}%;background:${TCOL[h.type]}"></i></span></button>`).join("")}</div></details>`:""}
       ${list.length?`<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Detail</th><th>Paid by</th><th class="r">Amount</th><th></th></tr></thead><tbody>
       ${list.map(x=>`<tr${x.id===state.pay.editId?' style="background:var(--accent-soft)"':""}><td>${esc(shortDate(x.date))}</td><td>${esc(TYPE[x.type].label)}</td><td>${esc(x.name)}</td><td class="muted">${esc([x.sub,x.note].filter(Boolean).join(" · "))}</td><td><span class="pill${x.mode==="Cash"?" ok":""}">${esc(x.mode)}</span></td><td class="num r">${rs(x.amount)}</td><td>${owner?`<button class="link" data-edit="${x.id}">Edit</button><span class="dw"><button class="link del" data-del="${x.id}"${canWrite?"":" disabled"}>Delete</button></span>`:`<span class="muted small">${esc(x.by||"")}</span>`}</td></tr>`).join("")}
       <tr class="total"><td colspan="5">Total</td><td class="num r">${rs(total)}</td><td></td></tr>
@@ -1102,8 +1119,12 @@ function renderPayments(){
   attachPicker($("#t_name"),type);
   p.querySelectorAll(".seg button[data-type]").forEach(b=>b.onclick=()=>{state.pay.type=b.dataset.type;state.pay.editId=null;render()});
   const ce=$("#cancelEdit");if(ce) ce.onclick=()=>{state.pay.editId=null;render()};
-  $("#f_type").onchange=e=>{pf.type=e.target.value;render()};
+  $("#f_type").onchange=e=>{pf.type=e.target.value;pf.name="all";pf.sub="all";render()};
   $("#f_mode").onchange=e=>{pf.mode=e.target.value;render()};
+  $("#f_name").onchange=e=>{pf.name=e.target.value;render()};
+  const fs=$("#f_sub");if(fs)fs.onchange=e=>{pf.sub=e.target.value;render()};
+  const fc=$("#f_clear");if(fc)fc.onclick=()=>{Object.assign(pf,{type:"all",mode:"all",q:"",name:"all",sub:"all"});render()};
+  p.querySelectorAll("[data-head]").forEach(b=>b.onclick=()=>{pf.name=b.dataset.head;render()});
   let qt;$("#f_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{pf.q=e.target.value.trim();render();const q=$("#f_q");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)};
   $("#txForm").onsubmit=async e=>{e.preventDefault();
     const amt=num($("#t_amount").value);if(amt<=0){toast("Enter an amount above zero");return}
@@ -1338,11 +1359,18 @@ function renderPartyAccounts(p){
   let parties=Object.values(book).sort((a,b)=>b.balance-a.balance||a.name.localeCompare(b.name));
   const totalDue=r2(parties.reduce((a,r)=>a+Math.max(0,r.balance),0));
   if(q) parties=parties.filter(r=>r.name.toLowerCase().includes(q)||r.phone.includes(q));
+  const paf=state.paf,cnt={all:Object.keys(book).length,pay:0,adv:0,set:0};
+  Object.values(book).forEach(r=>{if(r.balance>0)cnt.pay++;else if(r.balance<0)cnt.adv++;else cnt.set++});
+  if(paf.status==="pay")parties=parties.filter(r=>r.balance>0);else if(paf.status==="adv")parties=parties.filter(r=>r.balance<0);else if(paf.status==="set")parties=parties.filter(r=>r.balance===0);
+  const lastAct=r=>[...r.bills.map(b=>b.date),...r.pays.map(t=>t.date)].sort().pop()||"";
+  if(paf.sort==="name")parties.sort((a,b)=>a.name.localeCompare(b.name));else if(paf.sort==="recent")parties.sort((a,b)=>lastAct(b).localeCompare(lastAct(a)));
   const sel=book[state.party]||null;
   p.innerHTML=`<div class="cols">
     <div class="card"><div class="card-head"><h2>Parties</h2><button class="btn ghost small" id="newParty">+ New party</button></div>
       <div class="chips" style="margin-bottom:10px"><span class="chip">Total to pay <b>${rs(totalDue)}</b></span><span class="chip">${Object.keys(book).length} part${Object.keys(book).length===1?"y":"ies"}</span></div>
-      <div class="tools"><input type="search" id="pa_q" placeholder="Search party" value="${esc(state.partyq||"")}"></div>
+      <div class="tools"><input type="search" id="pa_q" placeholder="Search party" value="${esc(state.partyq||"")}">
+        <select id="pa_sort" aria-label="Sort parties"><option value="bal"${paf.sort==="bal"?" selected":""}>Most to pay first</option><option value="recent"${paf.sort==="recent"?" selected":""}>Recent activity</option><option value="name"${paf.sort==="name"?" selected":""}>Name A–Z</option></select></div>
+      <div class="quick" style="margin-bottom:10px">${[["all","All"],["pay","To pay"],["adv","Advance"],["set","Settled"]].map(([k,l])=>`<button type="button" data-pst="${k}" aria-pressed="${paf.status===k}">${l} <span class="muted small">${cnt[k]}</span></button>`).join("")}</div>
       <form class="f" id="npForm" hidden autocomplete="off" style="margin-bottom:12px">
         <label class="fl">Party name<input type="text" id="np_name" required></label>
         <div class="row2">${field("np_open","Old balance to pay (optional)","")}<label class="fl">Phone<input type="text" id="np_phone" inputmode="tel" placeholder="Optional"></label></div>
@@ -1353,6 +1381,8 @@ function renderPartyAccounts(p){
     <div class="card" id="partyCard">${sel?partyLedgerHtml(sel,owner):`<p class="empty">Pick a party to see its account: every bill, every payment and the balance to pay.</p>`}</div>
   </div>`;
   let qt;$("#pa_q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{state.partyq=e.target.value.trim();render();const s=$("#pa_q");s.focus();s.setSelectionRange(s.value.length,s.value.length)},250)};
+  p.querySelectorAll("[data-pst]").forEach(b=>b.onclick=()=>{paf.status=b.dataset.pst;render()});
+  $("#pa_sort").onchange=e=>{paf.sort=e.target.value;render()};
   p.querySelectorAll("[data-party]").forEach(b=>b.onclick=()=>{state.party=b.dataset.party;if(payForm.party!==state.party)payForm={party:null,alloc:{},vals:{}};render()});
   const np=$("#npForm");
   attachPicker($("#np_name"),"partyall");
@@ -1372,11 +1402,18 @@ function partyLedgerHtml(r,owner){
   rows.sort((a,b)=>a.date===b.date?a.at-b.at:(a.date<b.date?-1:1));
   let bal=r.opening;
   const srOf={};r.bills.forEach(b=>srOf[b.id]=b);
+  const plf=state.plf,ft={bill:0,pay:0,n:0};
+  const keep=x=>{if(plf.kind!=="all"&&x.kind!==plf.kind)return false;if(plf.mode!=="all"&&(x.kind!=="pay"||x.t.mode!==plf.mode))return false;if(plf.period==="period"&&(x.date<state.from||x.date>state.to))return false;return true};
+  const filtered=plf.kind!=="all"||plf.mode!=="all"||plf.period!=="all";
   const lines=rows.map(x=>{
+    const show=keep(x);if(show){ft.n++;if(x.kind==="bill")ft.bill=r2(ft.bill+num(x.b.amount));else ft.pay=r2(ft.pay+num(x.t.amount))}
+    const line=(()=>{
     if(x.kind==="bill"){bal=r2(bal+num(x.b.amount));return `<tr><td>${esc(shortDate(x.date))}</td><td>Bill · Sr ${x.b.sr}${x.b.billNo?" · no. "+esc(x.b.billNo):""} ${statusPill(x.b)}${x.b.due>0?` <button class="link" data-settle1="${x.b.id}">settle</button>`:""}</td><td class="num r">${rs(x.b.amount)}</td><td></td><td class="num r bal">${rs(bal)}</td></tr>`}
     const t=x.t,links=settleList(t).map(([id])=>srOf[id]?"Sr "+srOf[id].sr:null).filter(Boolean);
     bal=r2(bal-num(t.amount));
     return `<tr><td>${esc(shortDate(x.date))}</td><td>Paid · ${esc(t.mode)}${links.length?" · settles "+links.join(", "):" · on account"}${t.note?` <span class="muted">(${esc(t.note)})</span>`:""}${t.by?` <span class="muted small">by ${esc(t.by)}</span>`:""}${owner?` <button class="link" data-payedit="${t.id}">edit</button>`:""}</td><td></td><td class="num r">${rs(t.amount)}</td><td class="num r bal">${rs(bal)}</td></tr>`;
+    })();
+    return show?line:"";
   });
   const pf=payForm.party===r.key?payForm:{alloc:{},vals:{}};
   const defDate=todayStr();
@@ -1402,6 +1439,12 @@ function partyLedgerHtml(r,owner){
       <p class="muted small" style="margin:0">The payment is also added to Payments → Party paid, so the galla cash or UPI / bank balance goes down.</p>
     </form>
     <h3 style="margin:14px 0 8px;font-size:14px">Party ledger</h3>
+    <div class="tools" style="margin-bottom:8px">
+      <select id="pl_kind" aria-label="Show"><option value="all">Bills + payments</option><option value="bill"${plf.kind==="bill"?" selected":""}>Bills only</option><option value="pay"${plf.kind==="pay"?" selected":""}>Payments only</option></select>
+      <select id="pl_mode" aria-label="Paid by"><option value="all">Any mode</option>${MODES.map(m=>`<option${plf.mode===m?" selected":""}>${m}</option>`).join("")}</select>
+      <select id="pl_period" aria-label="Dates"><option value="all">All dates</option><option value="period"${plf.period==="period"?" selected":""}>${esc(periodLabel())} only</option></select>
+    </div>
+    ${filtered?`<div class="chips" style="margin-bottom:8px"><span class="chip">${ft.n} entr${ft.n===1?"y":"ies"}</span>${plf.kind!=="pay"?`<span class="chip">Bills <b>${rs(ft.bill)}</b></span>`:""}${plf.kind!=="bill"?`<span class="chip">Paid <b>${rs(ft.pay)}</b></span>`:""}<button class="link" id="pl_clear">Show all</button></div>`:""}
     <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Details</th><th class="r">Bill (+)</th><th class="r">Paid (−)</th><th class="r bal">Balance</th></tr></thead><tbody>
       <tr class="bf"><td></td><td>Old balance</td><td class="num r">${r.opening?rs(r.opening):""}</td><td></td><td class="num r bal">${rs(r.opening)}</td></tr>
       ${lines.join("")}
@@ -1411,6 +1454,8 @@ function partyLedgerHtml(r,owner){
 
 function wirePartyLedger(r,owner){
   const c=$("#partyCard");
+  [["pl_kind","kind"],["pl_mode","mode"],["pl_period","period"]].forEach(([id,k])=>{const el=$("#"+id);if(el)el.onchange=()=>{state.plf[k]=el.value;render()}});
+  const plc=$("#pl_clear");if(plc)plc.onclick=()=>{state.plf={kind:"all",mode:"all",period:"all"};render()};
   if(payForm.party!==r.key) payForm={party:r.key,alloc:{},vals:{},open:false};
   const form=$("#payForm");
   const readAlloc=()=>{const a={};c.querySelectorAll(".pfamt").forEach(i=>{const v=num(i.value);if(v>0)a[i.dataset.bid]=v});return a};

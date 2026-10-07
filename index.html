@@ -212,6 +212,48 @@ nav.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--acce
 .boxres.up{background:color-mix(in srgb,var(--good-soft) 70%,var(--paper));color:var(--good)}
 .boxres.down{background:var(--warn-soft);color:var(--warn)}
 .btn.warnbtn{background:var(--warn);color:var(--paper)}
+
+/* Colourful tiles: each kind of money has its own colour */
+:root{
+  --c-cash:#0f8a4f;--c-cash-bg:#e6f7ee;--c-upi:#2463d6;--c-upi-bg:#e8f0fe;--c-due:#c46a00;--c-due-bg:#fff2dc;
+  --c-exp:#d0344f;--c-exp-bg:#fde8ec;--c-sal:#7b3fd6;--c-sal-bg:#f1e9fd;--c-party:#0b8a8a;--c-party-bg:#e0f6f5;--c-out:#475569;--c-out-bg:#eef1f5;--c-pos:#a23ad1;--c-pos-bg:#f6e8fc;
+  --g-cash:linear-gradient(135deg,#0f9d58,#34c47c);--g-bank:linear-gradient(135deg,#2b5ce6,#5b8cff);--g-due:linear-gradient(135deg,#e07a00,#f5a524);--g-pos:linear-gradient(135deg,#8b2fc9,#d14fd0);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --c-cash:#5fd99a;--c-cash-bg:#132a1f;--c-upi:#8db4ff;--c-upi-bg:#16213a;--c-due:#f7b955;--c-due-bg:#2e2312;
+  --c-exp:#ff8da0;--c-exp-bg:#33161d;--c-sal:#c4a1ff;--c-sal-bg:#241a38;--c-party:#5fd6d4;--c-party-bg:#112c2c;--c-out:#b4c0d0;--c-out-bg:#1d242d;--c-pos:#e09bff;--c-pos-bg:#2c1937;
+  --g-cash:linear-gradient(135deg,#0c7a45,#1fa565);--g-bank:linear-gradient(135deg,#2048b8,#3d6fe0);--g-due:linear-gradient(135deg,#a85a00,#cc8410);--g-pos:linear-gradient(135deg,#6c2399,#a53aa4)}}
+:root[data-theme="dark"]{
+  --c-cash:#5fd99a;--c-cash-bg:#132a1f;--c-upi:#8db4ff;--c-upi-bg:#16213a;--c-due:#f7b955;--c-due-bg:#2e2312;
+  --c-exp:#ff8da0;--c-exp-bg:#33161d;--c-sal:#c4a1ff;--c-sal-bg:#241a38;--c-party:#5fd6d4;--c-party-bg:#112c2c;--c-out:#b4c0d0;--c-out-bg:#1d242d;--c-pos:#e09bff;--c-pos-bg:#2c1937;
+  --g-cash:linear-gradient(135deg,#0c7a45,#1fa565);--g-bank:linear-gradient(135deg,#2048b8,#3d6fe0);--g-due:linear-gradient(135deg,#a85a00,#cc8410);--g-pos:linear-gradient(135deg,#6c2399,#a53aa4)}
+.group{gap:6px;background:transparent;border:0;border-radius:0;overflow:visible}
+.glabel{background:transparent;padding:4px 2px;font-size:11.5px;font-weight:700}
+.glabel.g-sales{color:var(--accent)}.glabel.g-out{color:var(--c-exp)}.glabel.g-bal{color:var(--c-cash)}
+.tile{border-radius:12px;border:1px solid var(--line);position:relative;overflow:hidden}
+.tile[class*=" t-"]{border-color:transparent}
+.tile.t-cash{background:var(--c-cash-bg)}.tile.t-cash .v{color:var(--c-cash)}
+.tile.t-upi{background:var(--c-upi-bg)}.tile.t-upi .v{color:var(--c-upi)}
+.tile.t-due{background:var(--c-due-bg)}.tile.t-due .v{color:var(--c-due)}
+.tile.t-exp{background:var(--c-exp-bg)}.tile.t-exp .v{color:var(--c-exp)}
+.tile.t-sal{background:var(--c-sal-bg)}.tile.t-sal .v{color:var(--c-sal)}
+.tile.t-party{background:var(--c-party-bg)}.tile.t-party .v{color:var(--c-party)}
+.tile.t-out{background:var(--c-out-bg)}.tile.t-out .v{color:var(--c-out)}
+.tile.b-cash,.tile.b-bank,.tile.b-due,.tile.b-pos{color:#fff;box-shadow:0 6px 16px -10px rgba(0,0,0,.45)}
+.tile.b-cash{background:var(--g-cash)}.tile.b-bank{background:var(--g-bank)}.tile.b-due{background:var(--g-due)}.tile.b-pos{background:var(--g-pos)}
+.tile.b-cash .k,.tile.b-cash .s,.tile.b-bank .k,.tile.b-bank .s,.tile.b-due .k,.tile.b-due .s,.tile.b-pos .k,.tile.b-pos .s{color:#fff;opacity:.9}
+.tile.b-cash .v,.tile.b-bank .v,.tile.b-due .v,.tile.b-pos .v{font-weight:600}
+.tile.hero{box-shadow:0 6px 16px -10px rgba(0,0,0,.45)}
+.tile .ic{position:absolute;right:10px;top:8px;font-size:15px;opacity:.55}
+/* Daily entry balance strip */
+.balstrip{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.balcard{border-radius:14px;padding:12px 14px;color:#fff;display:grid;gap:2px;box-shadow:0 8px 20px -12px rgba(0,0,0,.5)}
+.balcard.cash{background:var(--g-cash)}.balcard.bank{background:var(--g-bank)}
+.balcard .k{font-size:12px;font-weight:600;opacity:.9;letter-spacing:.02em}
+.balcard .v{font-family:var(--mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.balcard .s{font-size:11.5px;opacity:.9}
+.balcard .flow{display:flex;justify-content:space-between;font-size:11.5px;opacity:.92;font-family:var(--mono)}
+@media (max-width:420px){.balcard .v{font-size:19px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -777,24 +819,25 @@ function renderSummary(){
   const t=totals(state.shop,from,to),cih=cashInHand(state.shop,to),bank=bankBalance(state.shop,to),due=outstanding(state.shop,to);
   const lr=posOn()?lastReading(state.shop,to):null;
   el.innerHTML=`
-  <div class="group"><div class="glabel">Sales</div>
+  <div class="group"><div class="glabel g-sales">Sales</div>
     <div class="tile hero"><span class="k">Net sale</span><span class="v">${rs(t.net)}</span><span class="s">Return ${rs(t.ret)}</span></div>
-    <div class="tile"><span class="k">Cash</span><span class="v">${rs(t.cash)}</span><span class="s">+ dues ${rs(t.duesCash)}</span></div>
-    <div class="tile"><span class="k">UPI</span><span class="v">${rs(t.upi)}</span><span class="s">+ dues ${rs(t.duesUpi)}</span></div>
-    <div class="tile"><span class="k">Unpaid</span><span class="v">${rs(t.unpaid)}</span><span class="s">New credit given</span></div></div>
-  <div class="group"><div class="glabel">Paid out</div>
-    <div class="tile"><span class="k">Expenses</span><span class="v">${rs(t.expense)}</span></div>
-    <div class="tile"><span class="k">Salary</span><span class="v">${rs(t.salary)}</span></div>
-    <div class="tile"><span class="k">Party paid</span><span class="v">${rs(t.party)}</span></div>
-    <div class="tile"><span class="k">Total paid out</span><span class="v">${rs(t.out)}</span><span class="s">Cash ${rs(t.cashOut)} · UPI/bank ${rs(t.bankOut)}</span></div></div>
-  ${isOwnerU()?`<div class="group"><div class="glabel">Balance</div>
-    <div class="tile"><span class="k">Cash in galla</span><span class="v">${cih==null?"—":rs(cih)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
-    <div class="tile"><span class="k">UPI / bank</span><span class="v">${bank==null?"—":rs(bank)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
-    <div class="tile"><span class="k">Unpaid due</span><span class="v">${rs(due)}</span><span class="s">From customers</span></div>
-    <div class="tile"><span class="k">${posOn()?"EOD POS":"Days entered"}</span><span class="v">${posOn()?(lr?rs(lr.r):"—"):t.days}</span><span class="s">${posOn()?(lr?(lr.auto?"Auto · ":"On ")+esc(niceDate(lr.date)):"None yet"):""}</span></div></div>`:""}`;
+    <div class="tile t-cash"><span class="k">Cash</span><span class="v">${rs(t.cash)}</span><span class="s">+ dues ${rs(t.duesCash)}</span></div>
+    <div class="tile t-upi"><span class="k">UPI</span><span class="v">${rs(t.upi)}</span><span class="s">+ dues ${rs(t.duesUpi)}</span></div>
+    <div class="tile t-due"><span class="k">Unpaid</span><span class="v">${rs(t.unpaid)}</span><span class="s">New credit given</span></div></div>
+  <div class="group"><div class="glabel g-out">Paid out</div>
+    <div class="tile t-exp"><span class="k">Expenses</span><span class="v">${rs(t.expense)}</span></div>
+    <div class="tile t-sal"><span class="k">Salary</span><span class="v">${rs(t.salary)}</span></div>
+    <div class="tile t-party"><span class="k">Party paid</span><span class="v">${rs(t.party)}</span></div>
+    <div class="tile t-out"><span class="k">Total paid out</span><span class="v">${rs(t.out)}</span><span class="s">Cash ${rs(t.cashOut)} · UPI/bank ${rs(t.bankOut)}</span></div></div>
+  ${isOwnerU()?`<div class="group"><div class="glabel g-bal">Balance</div>
+    ${state.tab==="entry"&&showEntryBal()?"":`<div class="tile b-cash"><span class="k">Cash in galla</span><span class="v">${cih==null?"—":rs(cih)}</span><span class="s">On ${esc(niceDate(to))}</span></div>
+    <div class="tile b-bank"><span class="k">UPI / bank</span><span class="v">${bank==null?"—":rs(bank)}</span><span class="s">On ${esc(niceDate(to))}</span></div>`}
+    <div class="tile b-due"><span class="k">Unpaid due</span><span class="v">${rs(due)}</span><span class="s">From customers</span></div>
+    <div class="tile ${posOn()?"b-pos":"t-out"}"><span class="k">${posOn()?"EOD POS":"Days entered"}</span><span class="v">${posOn()?(lr?rs(lr.r):"—"):t.days}</span><span class="s">${posOn()?(lr?(lr.auto?"Auto · ":"On ")+esc(niceDate(lr.date)):"None yet"):""}</span></div></div>`:""}`;
 }
 
 /* ---------- Daily entry ---------- */
+function showEntryBal(){const m=settings.entryBal||"owner";return m==="all"||(m==="owner"&&isOwnerU())}
 function renderEntry(){
   const p=$("#panel"),date=state.entryDate,pos=posOn();
   const ex=salesBetween(state.shop,date,date)[0]||{};
@@ -804,6 +847,7 @@ function renderEntry(){
   const dayTx=txnsBetween(state.shop,date,date),cashPaid=r2(dayTx.filter(x=>x.mode==="Cash").reduce((a,x)=>a+num(x.amount),0));
   let adjOn=ex.date?!!num(ex.cashAdj):true;
   p.innerHTML=`<div class="cols">
+    ${showEntryBal()?`<div class="balstrip" id="balStrip"></div>`:""}
     <div class="card"><div class="card-head"><h2>Sales · ${esc(niceDate(date))}</h2>${ex.date?'<span class="pill ok">Saved</span>':'<span class="pill">Not entered</span>'}</div>
       <form class="f" id="saleForm" autocomplete="off">
         <div class="step">1 · Today's sale${pos?" (bills)":""}</div>
@@ -930,7 +974,22 @@ function renderEntry(){
   }
   form.addEventListener("input",update);form.addEventListener("change",update);update();
   form.addEventListener("input",boxCalc);boxCalc();
-  $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_unpaid").value)));update()};
+  /* Cash & UPI balance strip: opening → closing, live while typing */
+  const bankOpen=bankBalance(state.shop,addDays(date,-1)),bankPaid=r2(dayTx.filter(x=>x.mode!=="Cash").reduce((a,x)=>a+num(x.amount),0));
+  function balStrip(){
+    const el=$("#balStrip");if(!el)return;
+    const bx=boxCalc(),adj=bx&&adjOn?bx.adj:0;
+    const cin=r2(num($("#s_cash").value)+num($("#s_duesCash").value)),bin=r2(num($("#s_upi").value)+num($("#s_duesUpi").value));
+    const f=v=>v==null?"—":rs(v);
+    const cc=bookOpen==null?null:r2(bookOpen+cin-cashPaid+adj),bc=bankOpen==null?null:r2(bankOpen+bin-bankPaid);
+    el.innerHTML=`<div class="muted small" style="grid-column:1/-1;margin-bottom:-4px">Balances for ${esc(shortDate(date))} · updates as you type</div><div class="balcard cash"><span class="k">💵 Cash in galla · closing</span><span class="v">${f(cc)}</span>
+        <span class="flow"><span>Open ${f(bookOpen)}</span><span>+${rs(cin)}</span></span><span class="flow"><span>Paid out</span><span>−${rs(cashPaid)}${adj?` · adj ${adj>0?"+":"−"}${rs(Math.abs(adj))}`:""}</span></span></div>
+      <div class="balcard bank"><span class="k">📱 UPI / bank · closing</span><span class="v">${f(bc)}</span>
+        <span class="flow"><span>Open ${f(bankOpen)}</span><span>+${rs(bin)}</span></span><span class="flow"><span>Paid out</span><span>−${rs(bankPaid)}</span></span></div>
+      ${bookOpen==null?`<p class="muted small" style="margin:0;grid-column:1/-1">Set opening balances in Settings to see running balances.</p>`:""}`;
+  }
+  form.addEventListener("input",balStrip);form.addEventListener("change",balStrip);balStrip();
+  $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_unpaid").value)));form.dispatchEvent(new Event("input"))};
   form.onsubmit=async e=>{e.preventDefault();
     const diff=update("keep");
     if(diff&&form.dataset.ok!=="1"){form.dataset.ok="1";btn.className="btn warnbtn";btn.textContent="Save anyway ("+(diff>0?"short ":"over ")+rs(Math.abs(diff))+")";toast("The day does not tally. Check the amounts or tap again to save.");return}
@@ -1501,6 +1560,10 @@ function renderSettings(){
         <p class="muted small" style="margin:10px 0 0">Entries sync live on every device that has this page open. Each device stays logged in until someone taps Log out.</p>
       </div>
     </div>
+    <div class="card"><h2 style="margin-bottom:6px">Balances in Daily entry</h2>
+      <p class="muted small" style="margin-top:0">Show the cash in galla and UPI / bank balance (opening → closing) at the top of Daily entry. It updates live as you type.</p>
+      <div class="seg" role="group" aria-label="Show balances">${[["owner","Owners only"],["all","Owners & managers"],["off","Off"]].map(([v,l])=>`<button type="button" data-eb="${v}" aria-pressed="${(settings.entryBal||"owner")===v}">${l}</button>`).join("")}</div>
+    </div>
     <div class="card" id="numCard"></div>
     <div class="card" id="headsCard"></div>
     <div class="card"><h2 style="margin-bottom:6px">Backup</h2>
@@ -1508,6 +1571,7 @@ function renderSettings(){
       <div class="actions"><button class="btn ghost" id="bkDown">Download backup</button><label class="btn ghost" for="bkFile">Restore from backup file</label><input type="file" id="bkFile" accept="application/json,.json" hidden></div>
     </div>`;
   renderHeads();renderNumView();
+  p.querySelectorAll("[data-eb]").forEach(b=>b.onclick=()=>saveSettings({...settings,entryBal:b.dataset.eb}));
   $("#bkDown").onclick=downloadBackup;
   $("#bkFile").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)restoreBackup(f)};
   const syncRole=()=>{$("#uf_shops").hidden=$("#uf_role").value==="owner"};

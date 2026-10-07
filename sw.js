@@ -2,7 +2,7 @@
    Your entries are NOT stored here: Firebase keeps them on the phone and syncs them.
    This file only makes the app itself open without internet.
    When you change index.html, bump VERSION so every phone picks up the new app. */
-const VERSION = "galla-v8";
+const VERSION = "galla-v9";
 const SHELL = [
   "./",
   "./index.html",

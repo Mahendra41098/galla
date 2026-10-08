@@ -260,6 +260,21 @@ nav.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--acce
 .balcard .s{font-size:11.5px;opacity:.9}
 .balcard .flow{display:flex;justify-content:space-between;font-size:11.5px;opacity:.92;font-family:var(--mono)}
 @media (max-width:420px){.balcard .v{font-size:19px}}
+/* Balance b/f, galla float, funds */
+.bfcard{display:flex;justify-content:space-between;gap:10px 16px;align-items:center;flex-wrap:wrap;background:var(--accent-soft);border-radius:10px;padding:10px 12px;font-size:14px}
+.bfcard b{font-family:var(--mono);font-size:18px;font-weight:600}
+.floatbox{border-radius:8px;padding:10px 12px;font-size:14px;background:var(--c-cash-bg);color:var(--c-cash);display:grid;gap:4px;font-weight:500}
+.floatbox.low{background:var(--warn-soft);color:var(--warn)}
+.fund{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:6px;background:var(--paper)}
+.fund.done{opacity:.72}
+.fhead{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.fline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0 2px;border-top:1px dashed var(--line);font-size:14px}
+.fline input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--good)}
+.fline .ft{flex:1;min-width:120px}
+.fline.ok .ft{text-decoration:line-through;color:var(--muted)}
+.flrow{display:grid;grid-template-columns:minmax(0,1fr) 110px 18px;gap:6px;align-items:center}
+.flrow input{font-size:16px}
+.prefill{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px;display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -290,6 +305,7 @@ window.GALLA_FIREBASE_CONFIG = {
         <button role="tab" data-tab="entry">Daily entry</button>
         <button role="tab" data-tab="payments">Payments</button>
         <button role="tab" data-tab="purchases">Purchases</button>
+        <button role="tab" data-tab="funds">Funds</button>
         <button role="tab" data-tab="accounts">Accounts</button>
         <button role="tab" data-tab="settings">Settings</button>
       </nav>
@@ -444,6 +460,12 @@ function bookId(shop,ym){return shop+"_"+ym}
 function shopBooks(shop){return Object.values(books).filter(b=>b&&b.shop===shop)}
 function curShop(){return (settings.shops||[]).find(s=>s.id===state.shop)}
 function posOn(){const s=curShop();return !!(s&&s.pos)}
+/* Sales return: off by default for Cmore, Pinky and Papillon (change per shop in Settings) */
+function retOf(s){if(!s)return true;if(typeof s.ret==="boolean")return s.ret;return !/c\s*more|pinky|papillon/i.test(s.name||"")}
+function retOn(){return retOf(curShop())}
+/* Galla float: change kept in the galla every night (default ₹2,500) */
+function floatOf(s){return s&&hasVal(s.float)?num(s.float):2500}
+function floatAmt(){return floatOf(curShop())}
 
 /* All sales for a shop, oldest first. For POS shops the day's sale = today's POS reading − previous reading. */
 let salesCache=new Map(),cacheBooks=null;
@@ -511,25 +533,47 @@ function txnsBetween(shop,from,to,type){
   for(const b of shopBooks(shop)){const t=b.txns||{};for(const id in t){const e=t[id];if(!e||e.deleted)continue;if(type&&e.type!==type)continue;if(e.date>=from&&e.date<=to)out.push({id,...e})}}
   return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
 }
+/* Card swipe / cash exchange: books/{shop_month}.xchg[id] = {date, dir, amount, pct, cash, party, note, by, at}
+   dir "in":  we swipe a neighbour's card on our machine (bank +amount) and give them cash (cash −cash). We earn amount − cash.
+   dir "out": we pay by card / UPI / bank (bank −amount) and get cash back (cash +cash). We pay amount − cash. */
+function xchgBetween(shop,from,to){
+  const out=[];
+  for(const b of shopBooks(shop)){const t=b.xchg||{};for(const id in t){const e=t[id];if(!e||e.deleted)continue;if(e.date>=from&&e.date<=to)out.push({id,...e})}}
+  return out.sort((a,b)=>a.date===b.date?((a.at||0)-(b.at||0)):(a.date<b.date?-1:1));
+}
+const saveXchg=entry=>write(async()=>{const ref=await ensureBook(state.shop,entry.date);await ref.update({xchg:{[uid()]:{...entry,deleted:false}}})},"Swipe exchange saved");
+const deleteXchg=x=>write(async()=>{const ref=await ensureBook(state.shop,x.date);await ref.update({xchg:{[x.id]:{deleted:true}}})},"Swipe exchange removed");
 function totals(shop,from,to){
-  const t={gross:0,ret:0,cash:0,upi:0,unpaid:0,duesCash:0,duesUpi:0,expense:0,salary:0,party:0,cashOut:0,bankOut:0,days:0,openUnpaid:0,cashAdj:0};
+  const t={gross:0,ret:0,cash:0,upi:0,unpaid:0,duesCash:0,duesUpi:0,expense:0,salary:0,party:0,cashOut:0,bankOut:0,days:0,openUnpaid:0,cashAdj:0,nightOut:0,card:0,xBankIn:0,xCashOut:0,xBankOut:0,xCashIn:0};
   for(const s of salesBetween(shop,from,to)){
-    t.gross+=num(s.total);t.ret+=num(s.ret);t.cash+=num(s.cash);t.upi+=num(s.upi);t.unpaid+=num(s.unpaid);
-    t.duesCash+=num(s.duesCash);t.duesUpi+=num(s.duesUpi);t.days++;t.cashAdj+=num(s.cashAdj);
+    t.gross+=num(s.total);t.ret+=num(s.ret);t.cash+=num(s.cash);t.upi+=num(s.upi);t.card+=num(s.card);t.unpaid+=num(s.unpaid);
+    t.duesCash+=num(s.duesCash);t.duesUpi+=num(s.duesUpi);t.days++;t.cashAdj+=num(s.cashAdj);t.nightOut+=num(s.nightOut);
     if(s.posIsStart) t.openUnpaid+=num(s.posOpenUnpaid);
   }
   for(const x of txnsBetween(shop,from,to)){t[x.type]+=num(x.amount);if(x.mode==="Cash")t.cashOut+=num(x.amount);else t.bankOut+=num(x.amount)}
+  for(const x of xchgBetween(shop,from,to)){if(x.dir==="in"){t.xBankIn+=num(x.amount);t.xCashOut+=num(x.cash)}else{t.xBankOut+=num(x.amount);t.xCashIn+=num(x.cash)}}
   for(const k in t) t[k]=r2(t[k]);
   t.net=r2(t.gross-t.ret);t.out=r2(t.expense+t.salary+t.party);
-  t.cashFlow=r2(t.cash+t.duesCash-t.cashOut+t.cashAdj);t.bankFlow=r2(t.upi+t.duesUpi-t.bankOut);
+  t.cashFlow=r2(t.cash+t.duesCash-t.cashOut+t.cashAdj-t.nightOut+t.xCashIn-t.xCashOut);t.bankFlow=r2(t.upi+t.card+t.duesUpi-t.bankOut+t.xBankIn-t.xBankOut);
+  t.xEarn=r2(t.xBankIn-t.xCashOut);t.xFee=r2(t.xBankOut-t.xCashIn);
   t.dues=r2(t.duesCash+t.duesUpi);
   return t;
 }
 function opening(shop){const o=(settings.opening||{})[shop]||{};return {date:o.date||"0000-01-01",cash:num(o.amount),bank:num(o.bank)}}
-function cashInHand(shop,upto){const o=opening(shop);if(upto<o.date)return null;return r2(o.cash+totals(shop,o.date,upto).cashFlow)}
+function cashInHand(shop,upto){
+  const o=opening(shop);let base=null,from=null;
+  if(upto>=o.date){base=o.cash;from=o.date}
+  for(const e of allSales(shop)){if(e.date>upto)break;if(hasVal(e.purant)&&(from==null||e.date>=from)){base=num(e.purant);from=e.date}}
+  if(base==null)return null;
+  return r2(base+totals(shop,from,upto).cashFlow);
+}
 function bankBalance(shop,upto){const o=opening(shop);if(upto<o.date)return null;return r2(o.bank+totals(shop,o.date,upto).bankFlow)}
+/* Cash / bank at the START of a day: the opening balance saved in Settings for that date, else the previous day's closing */
+function hasOpening(shop){return !!(settings.opening||{})[shop]}
+function cashAtStart(shop,date){const o=opening(shop);if(hasOpening(shop)&&o.date===date)return o.cash;return cashInHand(shop,addDays(date,-1))}
+function bankAtStart(shop,date){const o=opening(shop);if(hasOpening(shop)&&o.date===date)return o.bank;return bankBalance(shop,addDays(date,-1))}
 function outstanding(shop,upto){const t=totals(shop,"0000-01-01",upto);return r2(t.openUnpaid+t.unpaid-t.dues)}
-function splitDiff(s){return r2(num(s.total)-num(s.ret)-num(s.cash)-num(s.upi)-num(s.unpaid))}
+function splitDiff(s){return r2(num(s.total)-num(s.ret)-num(s.cash)-num(s.upi)-num(s.card)-num(s.unpaid))}
 function issuesOf(s){
   const out=[];
   if(!s) return out;
@@ -591,7 +635,7 @@ function render(){
   const u=me(),owner=isOwnerU();
   $("#who").innerHTML=`<span><b>${esc(u.name)}</b> · ${owner?"Owner":"Shop manager"}</span><button class="link" id="logout">Log out</button>`;
   $("#logout").onclick=()=>{setSession(null);loginPick=u.id;render()};
-  const allowedTabs=owner?["entry","payments","purchases","accounts","settings"]:["entry","payments","purchases"];
+  const allowedTabs=owner?["entry","payments","purchases","funds","accounts","settings"]:["entry","payments","purchases","funds"];
   if(!allowedTabs.includes(state.tab)) state.tab="entry";
   document.querySelectorAll("nav.tabs button").forEach(b=>b.hidden=!allowedTabs.includes(b.dataset.tab));
   const shops=myShops();
@@ -608,7 +652,9 @@ function render(){
   if(!state.shop&&state.tab!=="settings"){p.innerHTML=`<div class="card"><h2>Add your first shop</h2><p class="muted">Open Settings and add the shop you keep a cash book for.</p><button class="btn" id="goSet">Open Settings</button></div>`;$("#goSet").onclick=()=>{state.tab="settings";render()};return}
   const pend=owner&&state.shop?allPurchases(state.shop).filter(x=>x.reviewPending).length:0;
   const pt=document.querySelector('nav.tabs button[data-tab="purchases"]');pt.innerHTML="Purchases"+(pend?`<span class="badge">${pend}</span>`:"");
-  ({entry:renderEntry,payments:renderPayments,purchases:renderPurchases,accounts:renderAccounts,settings:renderSettings})[state.tab]();
+  const fpend=state.shop?allFunds(state.shop).filter(fundOpen).length:0;
+  document.querySelector('nav.tabs button[data-tab="funds"]').innerHTML="Funds"+(fpend?`<span class="badge">${fpend}</span>`:"");
+  ({entry:renderEntry,payments:renderPayments,purchases:renderPurchases,funds:renderFunds,accounts:renderAccounts,settings:renderSettings})[state.tab]();
 }
 
 function renderSetup(){
@@ -826,9 +872,9 @@ function renderSummary(){
   const lr=posOn()?lastReading(state.shop,to):null;
   el.innerHTML=`
   <div class="group"><div class="glabel g-sales">Sales</div>
-    <div class="tile hero"><span class="k">Net sale</span><span class="v">${rs(t.net)}</span><span class="s">Return ${rs(t.ret)}</span></div>
+    <div class="tile hero"><span class="k">Net sale</span><span class="v">${rs(t.net)}</span><span class="s">${retOn()?"Return "+rs(t.ret):t.days+" day"+(t.days===1?"":"s")+" entered"}</span></div>
     <div class="tile t-cash"><span class="k">Cash</span><span class="v">${rs(t.cash)}</span><span class="s">+ dues ${rs(t.duesCash)}</span></div>
-    <div class="tile t-upi"><span class="k">UPI</span><span class="v">${rs(t.upi)}</span><span class="s">+ dues ${rs(t.duesUpi)}</span></div>
+    <div class="tile t-upi"><span class="k">UPI + card</span><span class="v">${rs(t.upi+t.card)}</span><span class="s">${t.card?"Card "+rs(t.card)+" · ":""}+ dues ${rs(t.duesUpi)}</span></div>
     <div class="tile t-due"><span class="k">Unpaid</span><span class="v">${rs(t.unpaid)}</span><span class="s">New credit given</span></div></div>
   <div class="group"><div class="glabel g-out">Paid out</div>
     <div class="tile t-exp"><span class="k">Expenses</span><span class="v">${rs(t.expense)}</span></div>
@@ -849,17 +895,23 @@ function renderEntry(){
   const ex=salesBetween(state.shop,date,date)[0]||{};
   const prev=pos?prevReading(state.shop,date):null,realPrev=pos?lastRealReading(state.shop,date):null;
   const duesOpen=num(ex.duesCash)||num(ex.duesUpi);
-  const bookOpen=cashInHand(state.shop,addDays(date,-1));
-  const dayTx=txnsBetween(state.shop,date,date),cashPaid=r2(dayTx.filter(x=>x.mode==="Cash").reduce((a,x)=>a+num(x.amount),0));
+  const bookOpen=cashAtStart(state.shop,date);
+  const dayTx=txnsBetween(state.shop,date,date),cashPaid=r2(dayTx.filter(x=>x.mode==="Cash").reduce((a,x)=>a+num(x.amount),0)),dxt=totals(state.shop,date,date);
   let adjOn=ex.date?!!num(ex.cashAdj):true;
+  const hasPrev=hasOpening(state.shop)||allSales(state.shop).some(e=>e.date<date),fl=floatAmt(),bfBank=isOwnerU()?bankAtStart(state.shop,date):null;
   p.innerHTML=`<div class="cols">
     ${showEntryBal()?`<div class="balstrip" id="balStrip"></div>`:""}
     <div class="card"><div class="card-head"><h2>Sales · ${esc(niceDate(date))}</h2>${ex.date?'<span class="pill ok">Saved</span>':'<span class="pill">Not entered</span>'}</div>
       <form class="f" id="saleForm" autocomplete="off">
+        <div class="bfcard"><span><b style="font-family:var(--display);font-size:15px">Shree Rokad Purant b/f</b><br><span class="muted small">${bookOpen==null?"Set opening balance in Settings":(hasOpening(state.shop)&&opening(state.shop).date===date?"Opening balance from Settings":"Closing of "+esc(shortDate(addDays(date,-1))))}</span></span>
+          ${!retOn()&&bookOpen!=null?`<span style="text-align:right"><b style="color:${bookOpen<fl?"var(--warn)":"var(--good)"}">${rs(Math.max(0,Math.min(bookOpen,fl)))}</b><br><span class="muted small">Cash for exchange${bookOpen<fl?" · short "+rs(r2(fl-bookOpen)):""}</span></span>`:""}
+          <span style="text-align:right"><b>${bookOpen==null?"—":rs(bookOpen)}</b><br><span class="muted small">${retOn()?"Cash in galla":"Total cash b/f"}</span></span>
+          ${bfBank!=null?`<span style="text-align:right"><b>${rs(bfBank)}</b><br><span class="muted small">UPI / bank</span></span>`:""}</div>
         <div class="step">1 · Today's sale${pos?" (bills)":""}</div>
-        <div class="row2">${field("s_total",pos?"Today's sale (bills total)":"Total sale",ex.total)}${field("s_ret","Sale return",ex.ret)}</div>
+        <div class="row2">${field("s_total",pos?"Today's sale (bills total)":"Total sale",ex.total)}${retOn()?field("s_ret","Sale return",ex.ret):`<input type="hidden" id="s_ret" value="${esc(num(ex.ret))}">`}</div>
         <div class="row2">${field("s_cash","Cash",ex.cash)}${field("s_upi","UPI",ex.upi)}</div>
-        <div class="row2">${field("s_unpaid","Unpaid (udhaar)",ex.unpaid)}<label class="fl">&nbsp;<button class="btn ghost small" type="button" id="fillCash">Rest is cash</button></label></div>
+        <div class="row2">${field("s_card","Card",ex.card)}${field("s_unpaid","Unpaid (udhaar)",ex.unpaid)}</div>
+        <div class="actions"><button class="btn ghost small" type="button" id="fillCash">Rest is cash</button></div>
         <details class="more"${duesOpen?" open":""}><summary>Old dues received today</summary>
           <div class="row2">${field("s_duesCash","Dues in cash",ex.duesCash)}${field("s_duesUpi","Dues by UPI",ex.duesUpi)}</div></details>
         ${pos?`<div class="step">2 · EOD POS reading</div>
@@ -871,9 +923,12 @@ function renderEntry(){
         </div>
         <label class="tick"><input type="checkbox" id="s_posStart"${ex.posStart?" checked":""}> POS counter reset today (start a new chain)</label>
         <div id="s_startOpts" class="f" hidden>${field("s_posOpenUnpaid","Unpaid already inside this reading (opens unpaid account)",ex.posOpenUnpaid)}</div>`:""}
-        <div class="step">${pos?"3":"2"} · Cash box count</div>
-        <div class="row2">${field("s_openBox","Opening cash in box (counted)",ex.openBox,bookOpen!=null?`placeholder="Books: ${esc(String(bookOpen))}"`:"")}${field("s_closeBox","Closing cash in box (counted)",ex.closeBox)}</div>
+        <div class="step">${pos?"3":"2"} · Shree Rokad Purant &amp; closing cash in galla</div>
+        <div class="row2">${field("s_purant","Shree Rokad Purant (opening cash)",hasVal(ex.purant)?ex.purant:(bookOpen==null?"":bookOpen))}${field("s_closeBox","Closing cash in galla (counted)",ex.closeBox,'placeholder="Optional"')}</div>
+        <div class="muted small" id="s_purHint" style="margin-top:-4px"></div>
         <div id="s_box" class="f" style="gap:8px"></div>
+        <div class="row2">${field("s_nightOut","Cash taken out at night",ex.nightOut)}<label class="fl">&nbsp;<button class="btn ghost small" type="button" id="takeOut">Keep ${esc(rs(fl))} float, take rest</button></label></div>
+        <div id="s_float"></div>
         <label class="fl">Note<input type="text" id="s_note" value="${esc(ex.note||"")}" placeholder="Optional"></label>
         <div id="s_check" class="check"></div>
         <div class="actions">
@@ -884,6 +939,7 @@ function renderEntry(){
       </form>
     </div>
     <div class="card"><div class="card-head"><h2>Day ledger</h2><button class="btn ghost small" id="addPay">+ Add payment for this day</button></div>${dayLedger(date)}</div>
+    <div class="card" id="xCard"></div>
   </div>`;
   const form=$("#saleForm"),btn=$("#saveBtn");
   if(!isOwnerU()&&ex.date){
@@ -945,57 +1001,80 @@ function renderEntry(){
     if(ev!=="keep"){form.dataset.ok="";btn.className="btn";btn.textContent=(ex.date?"Update":"Save")+" day";}
     const c=$("#s_check");
     if(pos)posMsg();
-    const n=net(),got=r2(num($("#s_cash").value)+num($("#s_upi").value)+num($("#s_unpaid").value)),diff=r2(n-got);
+    const n=net(),got=r2(num($("#s_cash").value)+num($("#s_upi").value)+num($("#s_card").value)+num($("#s_unpaid").value)),diff=r2(n-got);
     let msg="",cls="";
     if(!n&&!got){c.className="check";c.textContent=msg||"Enter today's total sale and how it was received.";return 0}
-    if(diff===0){cls="ok";msg+="Tallies: cash + UPI + unpaid = "+rs(n)+"."}
-    else{cls="off";msg+=(diff>0?"Short by ":"Over by ")+rs(Math.abs(diff))+": cash + UPI + unpaid = "+rs(got)+", sale is "+rs(n)+"."}
+    if(diff===0){cls="ok";msg+="Tallies: cash + UPI + card + unpaid = "+rs(n)+"."}
+    else{cls="off";msg+=(diff>0?"Short by ":"Over by ")+rs(Math.abs(diff))+": cash + UPI + card + unpaid = "+rs(got)+", sale is "+rs(n)+"."}
     c.className="check "+cls;c.textContent=msg;return diff;
   }
-  /* Cash box: counted opening + cash in − cash out = expected; counted closing vs expected = surplus / short */
+  /* Shree Rokad Purant: opening cash (yesterday's closing by default, can be written) + cash in − cash out = cash in galla.
+     A counted closing can adjust the books; cash taken out at night is removed; what is left is tomorrow's purant. */
+  let lastExp=0;
   function boxCalc(){
-    const el=$("#s_box"),ov=$("#s_openBox").value,cv=$("#s_closeBox").value;
-    if(!hasVal(ov)&&!hasVal(cv)){el.innerHTML=`<p class="muted small" style="margin:0">Count the cash in the box when you open and when you close. The app shows any surplus or short and can adjust the books to match.</p>`;return null}
-    const open=hasVal(ov)?num(ov):(bookOpen!=null?bookOpen:0),cin=r2(num($("#s_cash").value)+num($("#s_duesCash").value)),exp=r2(open+cin-cashPaid);
-    const openDiff=bookOpen!=null&&hasVal(ov)?r2(open-bookOpen):0;
+    const el=$("#s_box"),pv=$("#s_purant").value,cv=$("#s_closeBox").value,no=num($("#s_nightOut").value);
+    const open=hasVal(pv)?num(pv):(bookOpen!=null?bookOpen:0),dc=num($("#s_duesCash").value),cin=r2(num($("#s_cash").value)+dc),exp=r2(open+cin-cashPaid+dxt.xCashIn-dxt.xCashOut);lastExp=exp;
+    const changed=hasVal(pv)&&(bookOpen==null||num(pv)!==bookOpen);
+    const hint=$("#s_purHint");
+    if(hint){hint.innerHTML=bookOpen==null||!hasPrev?(hasVal(pv)?"This purant starts the cash book from today.":"Write today's opening cash (Shree Rokad Purant) once to start. After that it comes from yesterday's closing.")
+      :changed?`Yesterday's closing was ${rs(bookOpen)}; written purant is ${num(pv)>bookOpen?"more":"less"} by ${rs(Math.abs(r2(num(pv)-bookOpen)))}. <button class="link" type="button" id="purReset">Use yesterday's closing</button>`
+      :"Same as yesterday's closing ✓ (change it if the galla had a different amount)";
+      const pr=$("#purReset");if(pr)pr.onclick=()=>{$("#s_purant").value=bookOpen;form.dispatchEvent(new Event("input"))}}
+    const d=hasVal(cv)?r2(num(cv)-exp):null,useAdj=d&&adjOn?d:0,eod=r2(exp+useAdj-no);
     let h=`<div class="boxcalc">
-      ${bookOpen!=null?`<div class="ln muted"><span>Book opening (yesterday's closing)</span><span class="num">${rs(bookOpen)}</span></div>`:""}
-      <div class="ln"><span>Opening in box${hasVal(ov)?"":" (same as books)"}</span><span class="num">${rs(open)}</span></div>
-      <div class="ln"><span>+ Cash sale${num($("#s_duesCash").value)?" + dues in cash":""}</span><span class="num">${rs(cin)}</span></div>
-      <div class="ln"><span>− Cash paid out today</span><span class="num">${rs(cashPaid)}</span></div>
-      <div class="ln tot"><span>Should be in box</span><span class="num">${rs(exp)}</span></div>
-      ${hasVal(cv)?`<div class="ln tot"><span>Counted at closing</span><span class="num">${rs(num(cv))}</span></div>`:""}</div>`;
-    if(openDiff) h+=`<div class="boxres ${openDiff>0?"up":"down"}">Opening box is ${openDiff>0?"more":"less"} than the books by ${rs(Math.abs(openDiff))}</div>`;
-    let adj=0;
-    if(hasVal(cv)){
-      const d=r2(num(cv)-exp);
-      h+=d===0?`<div class="boxres ok">Box matches ✓</div>`:`<div class="boxres ${d>0?"up":"down"}">${d>0?"Surplus (extra)":"Short"} ${rs(Math.abs(d))} at closing</div>`;
-      adj=bookOpen!=null?r2(num(cv)-(bookOpen+cin-cashPaid)):0;
-      if(adj) h+=`<label class="tick"><input type="checkbox" id="s_adj"${adjOn?" checked":""}> Adjust books by ${adj>0?"+":"−"}${rs(Math.abs(adj))} so galla cash = counted cash</label>`;
-      else if(bookOpen==null) h+=`<p class="muted small" style="margin:0">Set opening balances in Settings to let the app adjust the books.</p>`;
-    }
+      <div class="ln"><span>Shree Rokad Purant (opening)</span><span class="num">${rs(open)}</span></div>
+      <div class="ln"><span>+ Cash sale${dc?" + dues in cash":""}</span><span class="num">${rs(cin)}</span></div>
+      <div class="ln"><span>− Cash paid out (expense, salary, party)</span><span class="num">${rs(cashPaid)}</span></div>
+      ${dxt.xCashOut?`<div class="ln"><span>− Cash given for card swipe</span><span class="num">${rs(dxt.xCashOut)}</span></div>`:""}
+      ${dxt.xCashIn?`<div class="ln"><span>+ Cash received in swipe exchange</span><span class="num">${rs(dxt.xCashIn)}</span></div>`:""}
+      <div class="ln tot"><span>Cash that should be in galla</span><span class="num">${rs(exp)}</span></div>
+      ${hasVal(cv)?`<div class="ln"><span>Counted closing cash</span><span class="num">${rs(num(cv))}</span></div>`:""}
+      ${useAdj?`<div class="ln"><span>${useAdj>0?"+ Surplus":"− Short"} (books adjusted)</span><span class="num">${rs(Math.abs(useAdj))}</span></div>`:""}
+      ${no?`<div class="ln"><span>− Taken out at night</span><span class="num">${rs(no)}</span></div>`:""}
+      <div class="ln tot" style="font-size:16px"><span>EOD Rokad Purant for tomorrow</span><span class="num">${rs(eod)}</span></div></div>`;
+    if(d!=null){h+=d===0?`<div class="boxres ok">Counted cash matches ✓</div>`:`<div class="boxres ${d>0?"up":"down"}">${d>0?"Surplus (extra)":"Short"} ${rs(Math.abs(d))}: counted ${rs(num(cv))}, books say ${rs(exp)}</div>
+      <label class="tick"><input type="checkbox" id="s_adj"${adjOn?" checked":""}> Use counted cash: adjust books by ${d>0?"+":"−"}${rs(Math.abs(d))}</label>`}
     el.innerHTML=h;
-    const ck=$("#s_adj");if(ck)ck.onchange=()=>{adjOn=ck.checked};
-    return {open:hasVal(ov)?open:null,close:hasVal(cv)?num(cv):null,adj};
+    const ck=$("#s_adj");if(ck)ck.onchange=()=>{adjOn=ck.checked;form.dispatchEvent(new Event("input"))};
+    return {open,purant:changed?num(pv):null,close:hasVal(cv)?num(cv):null,adj:d||0,eod};
   }
+  /* Keep what was typed in the sale form if the page refreshes (e.g. after saving a swipe exchange) */
+  if(state.draft&&state.draft.key===state.shop+"|"+date){for(const [id,v] of Object.entries(state.draft.vals)){const el=$("#"+id);if(!el||el.disabled)continue;if(el.type==="checkbox")el.checked=v;else el.value=v}}
+  form.addEventListener("input",e=>{if(!e.target.id)return;const d=state.draft&&state.draft.key===state.shop+"|"+date?state.draft:(state.draft={key:state.shop+"|"+date,vals:{}});d.vals[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value});
+  renderXchg(date);
   form.addEventListener("input",update);form.addEventListener("change",update);update();
   form.addEventListener("input",boxCalc);boxCalc();
+  /* Galla float: what stays in the galla tonight after cash is taken out */
+  function floatCalc(){
+    const el=$("#s_float");if(!el)return;
+    const ov=$("#s_purant").value,cv=$("#s_closeBox").value,out=num($("#s_nightOut").value);let h="";
+    if(hasVal(ov)&&num(ov)<fl)h+=`<div class="floatbox low">Opening purant ${rs(num(ov))} is below the ${rs(fl)} float. Short of change by ${rs(r2(fl-num(ov)))}.</div>`;
+    if(hasVal(cv)){const c=num(cv),left=r2(c-out);
+      if(out>c)h+=`<div class="floatbox low">Taken out ${rs(out)} is more than the ${rs(c)} counted.</div>`;
+      else h+=`<div class="floatbox${left<fl?" low":""}"><span>Counted ${rs(c)} − taken out ${rs(out)} = <b>${rs(left)}</b> stays in galla for tomorrow</span><span>${left<fl?"Below the "+rs(fl)+" float by "+rs(r2(fl-left))+". Keep enough 10 / 50 / 100 / 200 notes for change.":left===fl?"Float "+rs(fl)+" kept ✓":"Float "+rs(fl)+" kept ✓ · "+rs(r2(left-fl))+" extra still in galla"}</span></div>`}
+    else if(out)h+=`<div class="floatbox">Taken out ${rs(out)} tonight. Count the closing cash to check the ${rs(fl)} float.</div>`;
+    else h+=`<p class="muted small" style="margin:0">Galla float: keep ${rs(fl)} in change every night. Tap “take rest” to fill the cash taken out.</p>`;
+    el.innerHTML=h;
+  }
+  form.addEventListener("input",floatCalc);floatCalc();
+  $("#takeOut").onclick=()=>{const cv=$("#s_closeBox").value,base=hasVal(cv)?num(cv):lastExp;
+    $("#s_nightOut").value=Math.max(0,r2(base-fl));form.dispatchEvent(new Event("input"))};
   /* Cash & UPI balance strip: opening → closing, live while typing */
-  const bankOpen=bankBalance(state.shop,addDays(date,-1)),bankPaid=r2(dayTx.filter(x=>x.mode!=="Cash").reduce((a,x)=>a+num(x.amount),0));
+  const bankOpen=bankAtStart(state.shop,date),bankPaid=r2(dayTx.filter(x=>x.mode!=="Cash").reduce((a,x)=>a+num(x.amount),0));
   function balStrip(){
     const el=$("#balStrip");if(!el)return;
     const bx=boxCalc(),adj=bx&&adjOn?bx.adj:0;
-    const cin=r2(num($("#s_cash").value)+num($("#s_duesCash").value)),bin=r2(num($("#s_upi").value)+num($("#s_duesUpi").value));
+    const cin=r2(num($("#s_cash").value)+num($("#s_duesCash").value)),bin=r2(num($("#s_upi").value)+num($("#s_card").value)+num($("#s_duesUpi").value));
     const f=v=>v==null?"—":rs(v);
-    const cc=bookOpen==null?null:r2(bookOpen+cin-cashPaid+adj),bc=bankOpen==null?null:r2(bankOpen+bin-bankPaid);
+    const no=num($("#s_nightOut").value),cc=(bookOpen==null&&!hasVal($("#s_purant").value))?null:r2(bx.open+cin-cashPaid+adj-no+dxt.xCashIn-dxt.xCashOut),bc=bankOpen==null?null:r2(bankOpen+bin-bankPaid+dxt.xBankIn-dxt.xBankOut);
     el.innerHTML=`<div class="muted small" style="grid-column:1/-1;margin-bottom:-4px">Balances for ${esc(shortDate(date))} · updates as you type</div><div class="balcard cash"><span class="k">💵 Cash in galla · closing</span><span class="v">${f(cc)}</span>
-        <span class="flow"><span>Open ${f(bookOpen)}</span><span>+${rs(cin)}</span></span><span class="flow"><span>Paid out</span><span>−${rs(cashPaid)}${adj?` · adj ${adj>0?"+":"−"}${rs(Math.abs(adj))}`:""}</span></span></div>
+        <span class="flow"><span>Purant ${cc==null?"—":rs(bx.open)}</span><span>+${rs(cin)}</span></span><span class="flow"><span>Paid out</span><span>−${rs(cashPaid)}${adj?` · adj ${adj>0?"+":"−"}${rs(Math.abs(adj))}`:""}${no?` · night −${rs(no)}`:""}</span></span></div>
       <div class="balcard bank"><span class="k">📱 UPI / bank · closing</span><span class="v">${f(bc)}</span>
         <span class="flow"><span>Open ${f(bankOpen)}</span><span>+${rs(bin)}</span></span><span class="flow"><span>Paid out</span><span>−${rs(bankPaid)}</span></span></div>
-      ${bookOpen==null?`<p class="muted small" style="margin:0;grid-column:1/-1">Set opening balances in Settings to see running balances.</p>`:""}`;
+      ${cc==null?`<p class="muted small" style="margin:0;grid-column:1/-1">Write the Shree Rokad Purant below to see running balances.</p>`:""}`;
   }
   form.addEventListener("input",balStrip);form.addEventListener("change",balStrip);balStrip();
-  $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_unpaid").value)));form.dispatchEvent(new Event("input"))};
+  $("#fillCash").onclick=()=>{$("#s_cash").value=Math.max(0,r2(net()-num($("#s_upi").value)-num($("#s_card").value)-num($("#s_unpaid").value)));form.dispatchEvent(new Event("input"))};
   form.onsubmit=async e=>{e.preventDefault();
     const diff=update("keep");
     if(diff&&form.dataset.ok!=="1"){form.dataset.ok="1";btn.className="btn warnbtn";btn.textContent="Save anyway ("+(diff>0?"short ":"over ")+rs(Math.abs(diff))+")";toast("The day does not tally. Check the amounts or tap again to save.");return}
@@ -1007,50 +1086,99 @@ function renderEntry(){
       const rb=v!==""&&!isStart&&!$("#s_rebaseBox").hidden&&$("#s_rebase").checked;entry.posRebase=rb;entry.posRebaseFrom=rb?$("#s_rebaseFrom").value:"";}
     if(!isOwnerU()&&salesBetween(state.shop,date,date)[0]){toast("This day is already saved. Only the owner can change it.");render();return}
     const bx=boxCalc();
-    entry.openBox=bx?bx.open:null;entry.closeBox=bx?bx.close:null;entry.cashAdj=bx&&adjOn?bx.adj:0;
+    entry.nightOut=num($("#s_nightOut").value);entry.purant=bx.purant;entry.openBox=hasVal(ex.openBox)?ex.openBox:null;entry.closeBox=bx.close;entry.cashAdj=adjOn?bx.adj:0;entry.card=num($("#s_card").value);
     entry.by=ex.by||me().name;if(ex.date)entry.editedBy=me().name;
-    await saveSale(date,entry);
+    if(await saveSale(date,entry))state.draft=null;
   };
   const ds=$("#delSale");if(ds) ds.onclick=()=>confirmInline($("#delWrap"),()=>deleteSale(date));
   $("#addPay").onclick=()=>{state.tab="payments";state.pay.editId=null;state.pay.date=date;render()};
   p.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.tab="payments";state.pay.editId=b.dataset.edit;render()});
 }
 
+function renderXchg(date){
+  const el=$("#xCard");if(!el)return;
+  const owner=isOwnerU(),xs=xchgBetween(state.shop,date,date);
+  const xf=state.xf=state.xf||{dir:"in",pct:5};
+  let pct0=xf.pct;try{const v=localStorage.getItem("galla-xpct");if(v!==null&&xf.pct===5)pct0=+v}catch(e){}
+  const tot=totals(state.shop,date,date);
+  el.innerHTML=`<div class="card-head"><h2>Card swipe / cash exchange</h2></div>
+    <form class="f" id="xForm" autocomplete="off">
+      <div class="seg" role="group" aria-label="Direction" style="flex-wrap:wrap">
+        <button type="button" data-xd="in" aria-pressed="${xf.dir==="in"}">We swiped card · gave cash</button>
+        <button type="button" data-xd="out" aria-pressed="${xf.dir==="out"}">We paid by card/bank · got cash</button></div>
+      <p class="muted small" style="margin:0">${xf.dir==="in"?"A neighbour's customer card is swiped on our machine. Bank goes up, cash in galla goes down, and we keep the charge.":"We pay by card, UPI or bank and take cash back. Bank goes down, cash in galla goes up, and we pay the charge."}</p>
+      <div class="row2">${field("x_amt",xf.dir==="in"?"Amount swiped (into bank)":"Amount paid from bank","")}<label class="fl">Charge %<input class="amt" type="number" inputmode="decimal" step="0.1" min="0" max="100" id="x_pct" value="${esc(pct0)}"></label></div>
+      <div class="row2">${field("x_cash",xf.dir==="in"?"Cash given":"Cash received","")}<label class="fl">Party / shop<input type="text" id="x_party" list="dl-xparty" placeholder="Neighbour shop"></label></div>
+      <div class="check" id="x_check">Enter the amount; cash is worked out from the charge %.</div>
+      <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>Save swipe exchange</button></div>
+    </form>
+    ${xs.length?`<div class="tbl-wrap" style="margin-top:12px"><table><thead><tr><th>Party</th><th>Type</th><th class="r">Bank</th><th class="r">Cash</th><th class="r">Charge</th><th></th></tr></thead><tbody>
+      ${xs.map(x=>`<tr><td>${esc(x.party||"—")}${x.note?`<div class="muted small">${esc(x.note)}</div>`:""}</td><td><span class="pill${x.dir==="in"?" ok":" warn"}">${x.dir==="in"?"We swiped":"We paid"}</span></td><td class="num r">${x.dir==="in"?"+":"−"}${rs(x.amount)}</td><td class="num r">${x.dir==="in"?"−":"+"}${rs(x.cash)}</td><td class="num r">${x.dir==="in"?"+":"−"}${rs(r2(num(x.amount)-num(x.cash)))}</td><td>${owner?`<span class="dw"><button class="link del" data-xdel="${x.id}">Delete</button></span>`:""}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="chips" style="margin-top:10px">${tot.xEarn?`<span class="chip">Commission earned <b>${rs(tot.xEarn)}</b></span>`:""}${tot.xFee?`<span class="chip">Charges paid <b>${rs(tot.xFee)}</b></span>`:""}<span class="chip">Cash ${tot.xCashIn-tot.xCashOut>=0?"+":"−"}<b>${rs(Math.abs(r2(tot.xCashIn-tot.xCashOut)))}</b></span><span class="chip">Bank ${tot.xBankIn-tot.xBankOut>=0?"+":"−"}<b>${rs(Math.abs(r2(tot.xBankIn-tot.xBankOut)))}</b></span></div>`:""}
+    <datalist id="dl-xparty">${[...new Set(Object.values(books).filter(b=>b&&b.shop===state.shop).flatMap(b=>Object.values(b.xchg||{}).map(x=>x&&x.party)).filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist>`;
+  let cashTyped=false;
+  const calc=()=>{const a=num($("#x_amt").value),p=num($("#x_pct").value);
+    if(!cashTyped)$("#x_cash").value=a?r2(a*(1-p/100)):"";
+    const c=num($("#x_cash").value),ch=r2(a-c),ck=$("#x_check");
+    if(!a){ck.className="check";ck.textContent="Enter the amount; cash is worked out from the charge %.";return false}
+    if(c>a){ck.className="check off";ck.textContent="Cash is more than the amount. Check the figures.";return false}
+    ck.className="check ok";
+    ck.textContent=xf.dir==="in"?`Bank +${rs(a)} · Cash in galla −${rs(c)} · You earn ${rs(ch)}`:`Bank −${rs(a)} · Cash in galla +${rs(c)} · You pay ${rs(ch)}`;return true};
+  $("#x_amt").oninput=calc;$("#x_pct").oninput=calc;$("#x_cash").oninput=()=>{cashTyped=hasVal($("#x_cash").value);calc()};
+  el.querySelectorAll("[data-xd]").forEach(b=>b.onclick=()=>{xf.dir=b.dataset.xd;xf.pct=num($("#x_pct").value);renderXchg(date)});
+  $("#xForm").onsubmit=async e=>{e.preventDefault();e.stopPropagation();
+    if(!calc()){toast("Check the swipe amounts");return}
+    const p=num($("#x_pct").value);try{localStorage.setItem("galla-xpct",String(p))}catch(er){}
+    const entry={date,dir:xf.dir,amount:num($("#x_amt").value),pct:p,cash:num($("#x_cash").value),party:$("#x_party").value.trim(),note:"",by:me().name,at:Date.now()};
+    await saveXchg(entry);};
+  el.querySelectorAll("[data-xdel]").forEach(b=>b.onclick=()=>{const x=xs.find(i=>i.id===b.dataset.xdel);confirmInline(b.parentElement,()=>deleteXchg(x))});
+}
 function boxRows(date){const s=salesBetween(state.shop,date,date)[0];if(!s||(!hasVal(s.openBox)&&!hasVal(s.closeBox)))return "";
   return `${hasVal(s.openBox)?`<tr class="bf"><td>Box counted at opening</td><td class="num r">${rs(s.openBox)}</td></tr>`:""}${hasVal(s.closeBox)?`<tr class="bf"><td>Box counted at closing</td><td class="num r">${rs(s.closeBox)}</td></tr>`:""}`}
 function dayLedger(date){
   const tx=txnsBetween(state.shop,date,date),t=totals(state.shop,date,date);
-  const yd=addDays(date,-1),oc=cashInHand(state.shop,yd),ob=bankBalance(state.shop,yd),od=outstanding(state.shop,yd);
+  const s0=salesBetween(state.shop,date,date)[0],yd=addDays(date,-1),oc0=cashAtStart(state.shop,date),oc=s0&&hasVal(s0.purant)?num(s0.purant):oc0,ob=bankAtStart(state.shop,date),od=outstanding(state.shop,yd);
   const cc=cashInHand(state.shop,date),cb=bankBalance(state.shop,date),cd=outstanding(state.shop,date);
   const f=v=>v==null?"—":rs(v);
-  const cashTx=tx.filter(x=>x.mode==="Cash"),bankTx=tx.filter(x=>x.mode!=="Cash");
+  const cashTx=tx.filter(x=>x.mode==="Cash"),bankTx=tx.filter(x=>x.mode!=="Cash"),xs=xchgBetween(state.shop,date,date);
+  const xCashRows=xs.map(x=>`<tr><td>Swipe exchange · ${esc(x.party||"neighbour")} <span class="muted">(${x.dir==="in"?"cash given":"cash received"})</span></td><td class="num r">${x.dir==="in"?"−":"+"} ${rs(x.cash)}</td></tr>`).join("");
+  const xBankRows=xs.map(x=>`<tr><td>Swipe exchange · ${esc(x.party||"neighbour")} <span class="muted">(${x.dir==="in"?"card swiped on our machine":"paid by card / bank"})</span></td><td class="num r">${x.dir==="in"?"+":"−"} ${rs(x.amount)}</td></tr>`).join("");
   const owner=isOwnerU();
   const txRow=x=>`<tr><td>${esc(TYPE[x.type].label)} · ${esc(x.name||"")}${x.sub?` <span class="muted">(${esc(x.sub)})</span>`:""}${owner?` <button class="link" data-edit="${x.id}">edit</button>`:""}</td><td class="num r">− ${rs(x.amount)}</td></tr>`;
   if(!owner) return `<div class="tbl-wrap"><table class="ledger"><tbody>
     <tr><th colspan="2">Galla cash today</th></tr>
-    <tr class="bf"><td>Opening</td><td class="num r">${f(oc)}</td></tr>
+    <tr class="bf"><td>Shree Rokad Purant (b/f)${oc!==oc0&&oc0!=null&&oc0!==0?` <span class="pill warn">written · yesterday ${rs(oc0)}</span>`:""}</td><td class="num r">${f(oc)}</td></tr>
+    ${!retOn()&&oc!=null?`<tr class="bf"><td>&nbsp;&nbsp;of which cash for exchange</td><td class="num r">${rs(Math.max(0,Math.min(oc,floatAmt())))}</td></tr>`:""}
     <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
     ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
     ${cashTx.map(txRow).join("")}
     ${t.cashAdj?`<tr><td>Cash box adjustment (${t.cashAdj>0?"surplus":"short"})</td><td class="num r">${t.cashAdj>0?"+":"−"} ${rs(Math.abs(t.cashAdj))}</td></tr>`:""}
-    <tr class="total"><td>Cash that should be in galla</td><td class="num r">${f(cc)}</td></tr>
+    ${xCashRows}
+    ${t.nightOut?`<tr><td>Cash taken out at night</td><td class="num r">− ${rs(t.nightOut)}</td></tr>`:""}
+    <tr class="total"><td>EOD Rokad Purant</td><td class="num r">${f(cc)}</td></tr>
     ${boxRows(date)}
     ${bankTx.length?`<tr><th colspan="2">Paid by UPI / bank</th></tr>${bankTx.map(txRow).join("")}`:""}
   </tbody></table></div>`;
   return `<div class="tbl-wrap"><table class="ledger"><tbody>
     <tr><th colspan="2">Galla cash</th></tr>
-    <tr class="bf"><td>Opening</td><td class="num r">${f(oc)}</td></tr>
+    <tr class="bf"><td>Shree Rokad Purant (b/f)${oc!==oc0&&oc0!=null&&oc0!==0?` <span class="pill warn">written · yesterday ${rs(oc0)}</span>`:""}</td><td class="num r">${f(oc)}</td></tr>
+    ${!retOn()&&oc!=null?`<tr class="bf"><td>&nbsp;&nbsp;of which cash for exchange</td><td class="num r">${rs(Math.max(0,Math.min(oc,floatAmt())))}</td></tr>`:""}
     <tr><td>Cash sale</td><td class="num r">+ ${rs(t.cash)}</td></tr>
     ${t.duesCash?`<tr><td>Dues received in cash</td><td class="num r">+ ${rs(t.duesCash)}</td></tr>`:""}
     ${cashTx.map(txRow).join("")}
     ${t.cashAdj?`<tr><td>Cash box adjustment (${t.cashAdj>0?"surplus":"short"})</td><td class="num r">${t.cashAdj>0?"+":"−"} ${rs(Math.abs(t.cashAdj))}</td></tr>`:""}
-    <tr class="total"><td>Closing cash</td><td class="num r">${f(cc)}</td></tr>
+    ${xCashRows}
+    ${t.nightOut?`<tr><td>Cash taken out at night</td><td class="num r">− ${rs(t.nightOut)}</td></tr>`:""}
+    <tr class="total"><td>EOD Rokad Purant</td><td class="num r">${f(cc)}</td></tr>
     ${boxRows(date)}
     <tr><th colspan="2">UPI / bank</th></tr>
-    <tr class="bf"><td>Opening</td><td class="num r">${f(ob)}</td></tr>
+    <tr class="bf"><td>Balance b/f</td><td class="num r">${f(ob)}</td></tr>
     <tr><td>UPI sale</td><td class="num r">+ ${rs(t.upi)}</td></tr>
+    ${t.card?`<tr><td>Card sale</td><td class="num r">+ ${rs(t.card)}</td></tr>`:""}
     ${t.duesUpi?`<tr><td>Dues received by UPI</td><td class="num r">+ ${rs(t.duesUpi)}</td></tr>`:""}
     ${bankTx.map(txRow).join("")}
+    ${xBankRows}
     <tr class="total"><td>Closing UPI / bank</td><td class="num r">${f(cb)}</td></tr>
     <tr><th colspan="2">Unpaid (udhaar)</th></tr>
     <tr class="bf"><td>Opening due</td><td class="num r">${rs(od)}</td></tr>
@@ -1069,6 +1197,7 @@ function renderPayments(){
   if(editing) state.pay.type=editing.type;
   const type=state.pay.type,T=TYPE[type];
   const defDate=editing?editing.date:(state.pay.date||(todayStr()>=from&&todayStr()<=to?todayStr():to));
+  const pre=!editing&&state.pay.prefill;
   let list=txnsBetween(state.shop,from,to).reverse();
   if(pf.type!=="all") list=list.filter(x=>x.type===pf.type);
   if(pf.mode!=="all") list=list.filter(x=>pf.mode==="Cash"?x.mode==="Cash":x.mode!=="Cash");
@@ -1086,14 +1215,15 @@ function renderPayments(){
   p.innerHTML=`<div class="cols">
     <div class="card"><div class="card-head"><h2>${editing?"Edit payment":"Add payment"}</h2>${editing?'<button class="link" id="cancelEdit">Cancel edit</button>':""}</div>
       <form class="f" id="txForm" autocomplete="off">
+        ${pre?`<div class="prefill"><span>Recording fund line: <b>${esc(pre.label)}</b>. It gets ticked in Funds when you save.</span><button class="link" type="button" id="preCancel">Cancel</button></div>`:""}
         <div class="seg" role="group" aria-label="Payment type">${Object.entries(TYPE).map(([k,v])=>`<button type="button" data-type="${k}" aria-pressed="${k===type}">${v.label}</button>`).join("")}</div>
-        <div class="row2"><label class="fl">Date<input type="date" id="t_date" value="${defDate}" required></label>${field("t_amount","Amount",editing?editing.amount:"","required")}</div>
+        <div class="row2"><label class="fl">Date<input type="date" id="t_date" value="${defDate}" required></label>${field("t_amount","Amount",editing?editing.amount:pre?pre.amount:"","required")}</div>
         <label class="fl">${T.nameLabel}<input type="text" id="t_name" list="dl-${type}" required value="${editing?esc(editing.name):""}"></label>
         <div class="row2">
           <label class="fl">Paid by<select id="t_mode">${MODES.map(m=>`<option${editing&&editing.mode===m?" selected":""}>${m}</option>`).join("")}</select></label>
           ${T.sub?(T.sub.opts?`<label class="fl">${T.sub.label}<select id="t_sub">${T.sub.opts.map(o=>`<option${editing&&editing.sub===o?" selected":""}>${o}</option>`).join("")}</select></label>`:`<label class="fl">${T.sub.label}<input type="text" id="t_sub" placeholder="Optional" value="${editing?esc(editing.sub||""):""}"></label>`):"<div></div>"}
         </div>
-        <label class="fl">Note<input type="text" id="t_note" placeholder="Optional" value="${editing?esc(editing.note||""):""}"></label>
+        <label class="fl">Note<input type="text" id="t_note" placeholder="Optional" value="${editing?esc(editing.note||""):pre?esc(pre.note):""}"></label>
         <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>${editing?"Update":"Save"} ${T.label.toLowerCase()}</button></div>
         <p class="muted small" style="margin:0">Cash comes out of the galla. UPI and bank come out of the UPI / bank account.</p>
       </form>
@@ -1119,6 +1249,7 @@ function renderPayments(){
   attachPicker($("#t_name"),type);
   p.querySelectorAll(".seg button[data-type]").forEach(b=>b.onclick=()=>{state.pay.type=b.dataset.type;state.pay.editId=null;render()});
   const ce=$("#cancelEdit");if(ce) ce.onclick=()=>{state.pay.editId=null;render()};
+  const pce=$("#preCancel");if(pce) pce.onclick=()=>{state.pay.prefill=null;state.tab="funds";render()};
   $("#f_type").onchange=e=>{pf.type=e.target.value;pf.name="all";pf.sub="all";render()};
   $("#f_mode").onchange=e=>{pf.mode=e.target.value;render()};
   $("#f_name").onchange=e=>{pf.name=e.target.value;render()};
@@ -1134,7 +1265,9 @@ function renderPayments(){
     if(T.sub) entry.sub=$("#t_sub").value.trim();
     entry.by=editing&&editing.by?editing.by:me().name;if(editing)entry.editedBy=me().name;
     if(editing&&editing.settles&&type==="party"){let left=amt;const st=[];for(const [id,a] of settleList(editing)){const v=Math.min(a,left);if(v>0){st.push({b:id,a:r2(v)});left=r2(left-v)}}entry.settles=st;}
-    if(await saveTxn(entry,editing&&editing.id,editing&&editing.date)){state.pay.editId=null;state.pay.date=entry.date;render();$("#t_amount").focus()}
+    if(await saveTxn(entry,editing&&editing.id,editing&&editing.date)){const pr=!editing&&state.pay.prefill;state.pay.editId=null;state.pay.date=entry.date;
+      if(pr){state.pay.prefill=null;await setFundLine(pr.fid,pr.i,true);state.tab="funds";render();return}
+      render();$("#t_amount").focus()}
   };
   p.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{state.pay.editId=b.dataset.edit;render();window.scrollTo({top:0,behavior:"smooth"})});
   p.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const x=list.find(i=>i.id===b.dataset.del);confirmInline(b.parentElement,()=>deleteTxn(x))});
@@ -1502,6 +1635,94 @@ function wirePartyLedger(r,owner){
       await write(()=>db.doc("parties/"+id).set(data),"Party saved");}}
 }
 
+/* ---------- Funds: money given out, with lines ticked once each payment is in the books ----------
+   books/{shop_month}.funds[id] = {date, amount, to, mode, remark, lines:[{r, a, done, doneBy, doneAt}], by, at}
+   A fund is only a reminder: it does not change galla or bank balances. The payments recorded later do. */
+function allFunds(shop){
+  const out=[];
+  for(const b of shopBooks(shop)){const s=b.funds||{};for(const id in s){const e=s[id];if(!e||e.deleted)continue;out.push({id,...e,lines:Array.isArray(e.lines)?e.lines:[]})}}
+  return out.sort((a,b)=>a.date===b.date?((b.at||0)-(a.at||0)):(a.date<b.date?1:-1));
+}
+function fundOpen(f){return f.lines.some(l=>!l.done)}
+function saveFund(entry,id,oldDate,msg){
+  const nid=id||uid();
+  return write(async()=>{
+    if(id&&oldDate&&oldDate.slice(0,7)!==entry.date.slice(0,7)){const old=await ensureBook(state.shop,oldDate);await old.update({funds:{[id]:{deleted:true}}})}
+    const ref=await ensureBook(state.shop,entry.date);await ref.update({funds:{[nid]:{...entry,deleted:false}}})
+  },msg);
+}
+const patchFund=(f,patch,msg)=>write(async()=>{const ref=await ensureBook(state.shop,f.date);await ref.update({funds:{[f.id]:patch}})},msg);
+function setFundLine(fid,i,done){
+  const f=allFunds(state.shop).find(x=>x.id===fid);if(!f||!f.lines[i])return;
+  const lines=f.lines.map((l,k)=>k===i?{...l,done,doneBy:done?me().name:"",doneAt:done?Date.now():0}:l);
+  const left=lines.filter(l=>!l.done).length;
+  return patchFund(f,{lines},done?(left?"Ticked · "+left+" still to record":"All lines recorded ✓"):"Marked as not recorded");
+}
+let fform={editId:null};
+function renderFunds(){
+  const p=$("#panel"),owner=isOwnerU(),shop=state.shop,{from,to}=state;
+  state.fview=state.fview||"open";
+  const all=allFunds(shop),editing=fform.editId?all.find(f=>f.id===fform.editId):null;
+  if(fform.editId&&!editing)fform={editId:null};
+  const lines=editing?editing.lines:[],rows=Math.max(3,lines.length);
+  const openAll=all.filter(fundOpen);
+  const list=state.fview==="open"?openAll:all.filter(f=>f.date>=from&&f.date<=to);
+  const pendAmt=r2(openAll.reduce((a,f)=>a+f.lines.filter(l=>!l.done).reduce((x,l)=>x+num(l.a),0),0));
+  const names=[...new Set(all.map(f=>f.to).filter(Boolean))];
+  const lineRow=(l,i)=>`<div class="flrow"><input type="text" class="fl_r" placeholder="Transaction ${i+1}: what for" value="${esc(l?l.r:"")}" aria-label="Transaction ${i+1}"><input type="number" class="fl_a amt" inputmode="decimal" step="0.01" min="0" placeholder="Amount" value="${l&&num(l.a)?esc(l.a):""}" aria-label="Amount ${i+1}"><span class="small" style="color:var(--good)">${l&&l.done?"✓":""}</span></div>`;
+  const fundCard=f=>{
+    const n=f.lines.length,done=f.lines.filter(l=>l.done).length,ls=r2(f.lines.reduce((a,l)=>a+num(l.a),0)),gap=r2(num(f.amount)-ls);
+    return `<div class="fund${done===n?" done":""}">
+      <div class="fhead"><div><b>${esc(f.to||"Fund")}</b> · ${esc(shortDate(f.date))} · <span class="pill">${esc(f.mode||"Cash")}</span>${f.remark?`<div class="muted small">${esc(f.remark)}</div>`:""}</div>
+        <div style="text-align:right"><div class="num" style="font-size:18px">${rs(f.amount)}</div><span class="pill${done===n?" ok":" warn"}">${done===n?"All recorded":done+" of "+n+" recorded"}</span></div></div>
+      ${f.lines.map((l,i)=>`<div class="fline${l.done?" ok":""}"><input type="checkbox" data-ftick="${f.id}" data-i="${i}"${l.done?" checked":""}${canWrite?"":" disabled"} aria-label="Recorded in books"><span class="ft">${esc(l.r||"—")}${l.done&&l.doneBy?` <span class="muted small">· ticked by ${esc(l.doneBy)}</span>`:""}</span><span class="num">${num(l.a)?rs(l.a):""}</span>${l.done?"":`<button class="btn ghost small" type="button" data-frec="${f.id}" data-i="${i}">Record in Payments</button>`}</div>`).join("")}
+      ${ls&&gap?`<div class="muted small">${gap>0?"Not yet split into lines: "+rs(gap):"Lines add up to "+rs(-gap)+" more than the fund"}</div>`:""}
+      <div class="actions">${owner?`<button class="link" data-fedit="${f.id}">Edit</button><span class="dw"><button class="link del" data-fdel="${f.id}">Delete</button></span>`:""}${f.by?`<span class="muted small">Entered by ${esc(f.by)}</span>`:""}</div>
+    </div>`};
+  p.innerHTML=`<div class="cols">
+    <div class="card"><div class="card-head"><h2>${editing?"Edit fund":"Fund given"}</h2>${editing?'<button class="link" id="fCancel">Cancel edit</button>':""}</div>
+      <form class="f" id="fForm" autocomplete="off">
+        <div class="row2"><label class="fl">Date<input type="date" id="f_date" value="${esc(editing?editing.date:todayStr())}" required></label>${field("f_amount","Fund amount",editing?editing.amount:"","required")}</div>
+        <div class="row2"><label class="fl">Given to<input type="text" id="f_to" list="dl-fundto" value="${esc(editing?editing.to||"":"")}" placeholder="Name"></label><label class="fl">Given in<select id="f_mode">${MODES.map(m=>`<option${editing&&editing.mode===m?" selected":""}>${m}</option>`).join("")}</select></label></div>
+        <label class="fl">Remark<input type="text" id="f_remark" value="${esc(editing?editing.remark||"":"")}" placeholder="What the fund is for"></label>
+        <fieldset><legend>Transactions to record in books</legend>
+          <div class="f" style="gap:6px" id="fLines">${Array.from({length:rows},(_,i)=>lineRow(lines[i],i)).join("")}</div>
+          <div class="actions" style="margin-top:8px;justify-content:space-between"><button class="link" type="button" id="fAddLine">+ Add line</button><span class="muted small" id="fSum"></span></div>
+        </fieldset>
+        <div class="actions"><button class="btn" type="submit"${canWrite?"":" disabled"}>${editing?"Save changes":"Save fund"}</button></div>
+        <p class="muted small" style="margin:0">Each line stays pending until its tick box is ticked, once the payment is entered in Payments. Don't know the lines yet? Leave them empty; one line is made from the remark.</p>
+      </form></div>
+    <div class="card"><div class="card-head"><h2>Funds given</h2></div>
+      <div class="seg" role="group" aria-label="Show funds" style="margin-bottom:12px"><button type="button" data-fv="open" aria-pressed="${state.fview==="open"}">Pending · all dates</button><button type="button" data-fv="all" aria-pressed="${state.fview==="all"}">All · ${esc(periodLabel())}</button></div>
+      <div class="chips" style="margin-bottom:12px"><span class="chip">${openAll.length} fund${openAll.length===1?"":"s"} pending</span><span class="chip">Still to record <b>${rs(pendAmt)}</b></span></div>
+      ${list.length?`<div class="f">${list.map(fundCard).join("")}</div>`:`<p class="empty">${state.fview==="open"?"Nothing pending. Every fund is recorded in the books ✓":"No funds given in "+esc(periodLabel())+"."}</p>`}
+    </div></div>
+    <datalist id="dl-fundto">${names.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>`;
+  p.querySelectorAll("[data-fv]").forEach(b=>b.onclick=()=>{state.fview=b.dataset.fv;render()});
+  const fl=$("#fLines"),form=$("#fForm");
+  const fsum=()=>{const sm=r2([...fl.querySelectorAll(".fl_a")].reduce((a,i)=>a+num(i.value),0)),amt=num($("#f_amount").value);
+    $("#fSum").textContent=sm?"Lines "+rs(sm)+(amt?" of "+rs(amt)+(sm===amt?" ✓":""):""):""};
+  form.addEventListener("input",fsum);fsum();
+  $("#fAddLine").onclick=()=>{const n=fl.querySelectorAll(".flrow").length;fl.insertAdjacentHTML("beforeend",lineRow(null,n));fl.lastElementChild.querySelector("input").focus()};
+  const fc=$("#fCancel");if(fc)fc.onclick=()=>{fform={editId:null};render()};
+  form.onsubmit=async e=>{e.preventDefault();
+    const amt=num($("#f_amount").value);if(amt<=0){toast("Enter the fund amount");return}
+    const rem=$("#f_remark").value.trim();
+    let ls=[...fl.querySelectorAll(".flrow")].map((row,i)=>({r:row.querySelector(".fl_r").value.trim(),a:num(row.querySelector(".fl_a").value),old:lines[i]})).filter(l=>l.r||l.a)
+      .map(l=>({r:l.r,a:l.a,done:!!(l.old&&l.old.done),doneBy:(l.old&&l.old.doneBy)||"",doneAt:(l.old&&l.old.doneAt)||0}));
+    if(!ls.length)ls=[{r:rem||"Fund payment",a:amt,done:false,doneBy:"",doneAt:0}];
+    const entry={date:$("#f_date").value,amount:amt,to:$("#f_to").value.trim(),mode:$("#f_mode").value,remark:rem,lines:ls};
+    if(editing){entry.by=editing.by||"";entry.at=editing.at||Date.now();entry.editedBy=me().name}else{entry.by=me().name;entry.at=Date.now()}
+    if(await saveFund(entry,editing&&editing.id,editing&&editing.date,editing?"Fund updated":"Fund saved · "+ls.length+" line"+(ls.length===1?"":"s")+" to record")){fform={editId:null};render()}
+  };
+  p.querySelectorAll("[data-ftick]").forEach(c=>c.onchange=()=>setFundLine(c.dataset.ftick,+c.dataset.i,c.checked));
+  p.querySelectorAll("[data-frec]").forEach(b=>b.onclick=()=>{const f=all.find(x=>x.id===b.dataset.frec),i=+b.dataset.i,l=f.lines[i];
+    state.pay.editId=null;state.pay.prefill={fid:f.id,i,amount:num(l.a)||"",note:[l.r,f.to?"fund to "+f.to:""].filter(Boolean).join(" · "),label:(l.r||"line "+(i+1))+" · "+(f.to||"fund")};
+    state.pay.date=todayStr();state.tab="payments";render();window.scrollTo({top:0})});
+  p.querySelectorAll("[data-fedit]").forEach(b=>b.onclick=()=>{fform={editId:b.dataset.fedit};render();window.scrollTo({top:0,behavior:"smooth"})});
+  p.querySelectorAll("[data-fdel]").forEach(b=>b.onclick=()=>{const f=all.find(x=>x.id===b.dataset.fdel);confirmInline(b.parentElement,()=>patchFund(f,{deleted:true},"Fund removed"))});
+}
+
 /* ---------- Accounts ---------- */
 function renderAccounts(){
   const p=$("#panel"),shop=state.shop,pos=posOn(),{from,to}=state,af=state.af;
@@ -1517,13 +1738,13 @@ function renderAccounts(){
       d.setMonth(d.getMonth()+1)}
   }else{
     const sm=Object.fromEntries(salesBetween(shop,from,to).map(s=>[s.date,s]));
-    const dates=new Set(Object.keys(sm));txnsBetween(shop,from,to).forEach(x=>dates.add(x.date));
+    const dates=new Set(Object.keys(sm));txnsBetween(shop,from,to).forEach(x=>dates.add(x.date));xchgBetween(shop,from,to).forEach(x=>dates.add(x.date));
     [...dates].sort().forEach(d=>{const s=sm[d];const iss=s?issuesOf(s):(pos?["No sales entry"]:[]);
       rows.push({key:d,label:shortDate(d),end:d,t:totals(shop,d,d),iss,reading:s?readingOf(s):null})});
   }
   const shown=af.issues?rows.filter(r=>r.iss.length):rows;
   const T=totals(shop,from,to),bal=d=>({cash:cashInHand(shop,d),bank:bankBalance(shop,d),due:outstanding(shop,d)});
-  const o=bal(addDays(from,-1)),c=bal(to),f=v=>v==null?"—":rs(v);
+  const o={cash:cashAtStart(shop,from),bank:bankAtStart(shop,from),due:outstanding(shop,addDays(from,-1))},c=bal(to),f=v=>v==null?"—":rs(v);
   const issueCount=rows.filter(r=>r.iss.length).length;
   const showPos=pos&&group==="day";
   p.innerHTML=`<div class="card">
@@ -1532,16 +1753,16 @@ function renderAccounts(){
       <div class="seg" role="group" aria-label="Group by"><button data-g="day" aria-pressed="${group==="day"}">Day-wise</button><button data-g="month" aria-pressed="${group==="month"}">Month-wise</button></div>
       <label class="tick"><input type="checkbox" id="onlyIss"${af.issues?" checked":""}> Only ${group==="day"?"days":"months"} that need checking${issueCount?` <span class="pill warn">${issueCount}</span>`:""}</label>
     </div>
-    ${shown.length?`<div class="tbl-wrap"><table><thead><tr><th>${group==="day"?"Date":"Month"}</th>${showPos?'<th class="r">EOD POS</th>':""}<th class="r">Net sale</th><th class="r">Cash</th><th class="r">UPI</th><th class="r">Unpaid</th><th class="r">Return</th><th class="r">Dues recd.</th><th class="r">Expense</th><th class="r">Salary</th><th class="r">Party</th><th class="r bal">Galla cash</th><th class="r bal">UPI / bank</th><th class="r bal">Unpaid due</th><th>Check</th></tr></thead><tbody>
-    <tr class="bf"><td>Brought forward</td>${showPos?"<td></td>":""}<td colspan="9"></td><td class="num r bal">${f(o.cash)}</td><td class="num r bal">${f(o.bank)}</td><td class="num r bal">${rs(o.due)}</td><td></td></tr>
-    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading.r)+(r.reading.auto?' <span class="pill">auto</span>':' <span class="pill ok">POS</span>')+(r.reading.jump?` <span class="pill warn">POS set ${r.reading.jump>0?"+":"−"}${rs(Math.abs(r.reading.jump))}</span>`:"")}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td><td class="num r">${rs(r.t.ret)}</td><td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
-    ${af.issues?"":`<tr class="total"><td>Total</td>${showPos?"<td></td>":""}<td class="num r">${rs(T.net)}</td><td class="num r">${rs(T.cash)}</td><td class="num r">${rs(T.upi)}</td><td class="num r">${rs(T.unpaid+T.openUnpaid)}</td><td class="num r">${rs(T.ret)}</td><td class="num r">${rs(T.dues)}</td><td class="num r">${rs(T.expense)}</td><td class="num r">${rs(T.salary)}</td><td class="num r">${rs(T.party)}</td><td class="num r bal">${f(c.cash)}</td><td class="num r bal">${f(c.bank)}</td><td class="num r bal">${rs(c.due)}</td><td></td></tr>`}
+    ${shown.length?`<div class="tbl-wrap"><table><thead><tr><th>${group==="day"?"Date":"Month"}</th>${showPos?'<th class="r">EOD POS</th>':""}<th class="r">Net sale</th><th class="r">Cash</th><th class="r">UPI</th><th class="r">Card</th><th class="r">Unpaid</th>${retOn()?'<th class="r">Return</th>':""}<th class="r">Dues recd.</th><th class="r">Expense</th><th class="r">Salary</th><th class="r">Party</th><th class="r">Taken out</th><th class="r bal">Rokad purant</th><th class="r bal">UPI / bank</th><th class="r bal">Unpaid due</th><th>Check</th></tr></thead><tbody>
+    <tr class="bf"><td>Brought forward</td>${showPos?"<td></td>":""}<td colspan="${retOn()?11:10}"></td><td class="num r bal">${f(o.cash)}</td><td class="num r bal">${f(o.bank)}</td><td class="num r bal">${rs(o.due)}</td><td></td></tr>
+    ${shown.map(r=>{const b=bal(r.end);return `<tr class="click" data-key="${r.key}"><td>${esc(r.label)}</td>${showPos?`<td class="num r">${r.reading==null?"—":rs(r.reading.r)+(r.reading.auto?' <span class="pill">auto</span>':' <span class="pill ok">POS</span>')+(r.reading.jump?` <span class="pill warn">POS set ${r.reading.jump>0?"+":"−"}${rs(Math.abs(r.reading.jump))}</span>`:"")}</td>`:""}<td class="num r">${rs(r.t.net)}</td><td class="num r">${rs(r.t.cash)}</td><td class="num r">${rs(r.t.upi)}</td><td class="num r">${rs(r.t.card)}</td><td class="num r">${rs(r.t.unpaid+r.t.openUnpaid)}</td>${retOn()?`<td class="num r">${rs(r.t.ret)}</td>`:""}<td class="num r">${rs(r.t.dues)}</td><td class="num r">${rs(r.t.expense)}</td><td class="num r">${rs(r.t.salary)}</td><td class="num r">${rs(r.t.party)}</td><td class="num r">${rs(r.t.nightOut)}</td><td class="num r bal">${f(b.cash)}</td><td class="num r bal">${f(b.bank)}</td><td class="num r bal">${rs(b.due)}</td><td>${r.iss.length?r.iss.map(i=>`<span class="pill warn">${esc(i)}</span>`).join(" "):'<span class="pill ok">OK</span>'}</td></tr>`}).join("")}
+    ${af.issues?"":`<tr class="total"><td>Total</td>${showPos?"<td></td>":""}<td class="num r">${rs(T.net)}</td><td class="num r">${rs(T.cash)}</td><td class="num r">${rs(T.upi)}</td><td class="num r">${rs(T.card)}</td><td class="num r">${rs(T.unpaid+T.openUnpaid)}</td>${retOn()?`<td class="num r">${rs(T.ret)}</td>`:""}<td class="num r">${rs(T.dues)}</td><td class="num r">${rs(T.expense)}</td><td class="num r">${rs(T.salary)}</td><td class="num r">${rs(T.party)}</td><td class="num r">${rs(T.nightOut)}</td><td class="num r bal">${f(c.cash)}</td><td class="num r bal">${f(c.bank)}</td><td class="num r bal">${rs(c.due)}</td><td></td></tr>`}
     </tbody></table></div>
     <p class="muted small" style="margin:10px 0 0">Tap a ${group==="day"?"day to open its entry":"month to see its days"}. Balances carry forward from the row above.</p>`:`<p class="empty">${af.issues?"Nothing needs checking in "+esc(periodLabel())+".":"No entries for "+esc(periodLabel())+" yet."}</p>`}
   </div>
   <div class="card"><h2 style="margin-bottom:10px">Money in and out · ${esc(periodLabel())}</h2><div class="chips">
     <span class="chip">Net sale <b>${rs(T.net)}</b></span><span class="chip">Expenses <b>${rs(T.expense)}</b></span><span class="chip">Salary <b>${rs(T.salary)}</b></span>
-    <span class="chip">Party paid <b>${rs(T.party)}</b></span><span class="chip">Sale − expenses − salary <b>${rs(T.net-T.expense-T.salary)}</b></span>
+    <span class="chip">Party paid <b>${rs(T.party)}</b></span><span class="chip">Sale − expenses − salary <b>${rs(T.net-T.expense-T.salary)}</b></span>${T.xEarn?`<span class="chip">Swipe commission earned <b>${rs(T.xEarn)}</b></span>`:""}${T.xFee?`<span class="chip">Swipe charges paid <b>${rs(T.xFee)}</b></span>`:""}
   </div><p class="muted small" style="margin:10px 0 0">Party payments buy stock, so they are shown separately and not counted as a cost here.</p></div>`;
   p.querySelectorAll(".seg button[data-g]").forEach(b=>b.onclick=()=>{af.group=b.dataset.g;render()});
   $("#onlyIss").onchange=e=>{af.issues=e.target.checked;render()};
@@ -1553,19 +1774,20 @@ function renderAccounts(){
 async function exportCsv(from,to){
   const shopName=(curShop()||{}).name||"shop";
   const q=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const lines=[["Date","Kind","Name / category","Detail","Paid by","POS reading","Total sale","Return","Net sale","Cash","UPI","Unpaid","Dues cash","Dues UPI","Payment amount","Galla cash","UPI / bank","Unpaid due","Box opening","Box closing","Cash adjustment","Note"].join(",")];
-  const dates=new Set();salesBetween(state.shop,from,to).forEach(s=>dates.add(s.date));txnsBetween(state.shop,from,to).forEach(x=>dates.add(x.date));
+  const lines=[["Date","Kind","Name / category","Detail","Paid by","POS reading","Total sale","Return","Net sale","Cash","UPI","Card","Unpaid","Dues cash","Dues UPI","Payment amount","Rokad purant (closing)","UPI / bank","Unpaid due","Box opening","Box closing (counted)","Cash adjustment","Taken out at night","Note"].join(",")];
+  const dates=new Set();salesBetween(state.shop,from,to).forEach(s=>dates.add(s.date));txnsBetween(state.shop,from,to).forEach(x=>dates.add(x.date));xchgBetween(state.shop,from,to).forEach(x=>dates.add(x.date));
   for(const d of [...dates].sort()){
     const s=salesBetween(state.shop,d,d)[0];
-    if(s) lines.push([d,"Sales","","","",s.posReading,s.total,s.ret,r2(num(s.total)-num(s.ret)),s.cash,s.upi,s.unpaid,s.duesCash,s.duesUpi,"","","","",s.openBox??"",s.closeBox??"",s.cashAdj||"",s.note].map(q).join(","));
-    for(const x of txnsBetween(state.shop,d,d)) lines.push([d,TYPE[x.type].label,x.name,x.sub,x.mode,"","","","","","","","","",x.amount,"","","","","","",x.note].map(q).join(","));
-    lines.push([d,"Closing balance","","","","","","","","","","","","","",cashInHand(state.shop,d),bankBalance(state.shop,d),outstanding(state.shop,d),"","","",""].map(q).join(","));
+    if(s) lines.push([d,"Sales","","","",s.posReading,s.total,s.ret,r2(num(s.total)-num(s.ret)),s.cash,s.upi,s.card||"",s.unpaid,s.duesCash,s.duesUpi,"","","","",s.openBox??"",s.closeBox??"",s.cashAdj||"",s.nightOut||"",s.note].map(q).join(","));
+    for(const x of xchgBetween(state.shop,d,d)) lines.push([d,"Swipe exchange",x.party||"",x.dir==="in"?"Card swiped on our machine, cash given":"Paid by card / bank, cash received",x.dir==="in"?"Bank in":"Bank out","","","","","","","","","","",x.amount,"","","","","","","","Cash "+x.cash+" · charge "+x.pct+"% · "+(x.note||"")].map(q).join(","));
+    for(const x of txnsBetween(state.shop,d,d)) lines.push([d,TYPE[x.type].label,x.name,x.sub,x.mode,"","","","","","","","","","",x.amount,"","","","","","","",x.note].map(q).join(","));
+    lines.push([d,"Closing balance","","","","","","","","","","","","","","",cashInHand(state.shop,d),bankBalance(state.shop,d),outstanding(state.shop,d),"","","","",""].map(q).join(","));
   }
   saveFile(`${slug(shopName)}-cashbook-${from}-to-${to}.csv`,"\ufeff"+lines.join("\n"),"text/csv");
 }
 
 /* ---------- Settings ---------- */
-function shopRowHtml(s,i,cur){return `<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label>
+function shopRowHtml(s,i,cur){return `<div class="it"><input type="text" value="${esc(s.name)}" data-i="${i}" aria-label="Shop name"><label class="tick"><input type="checkbox" class="poschk" data-i="${i}"${s.pos?" checked":""}> Match POS</label><label class="tick"><input type="checkbox" class="retchk" data-i="${i}"${retOf(s)?" checked":""}> Sales return</label><label class="tick">Galla float ₹<input type="number" class="floatin" inputmode="numeric" min="0" step="1" data-i="${i}" value="${esc(floatOf(s))}" style="width:90px"></label>
   <div class="swatches" role="group" aria-label="Colour for ${esc(s.name)}">${PKEYS.map(k=>`<button type="button" data-i="${i}" data-c="${k}" title="${PALETTE[k].n}" aria-label="${PALETTE[k].n}" aria-pressed="${k===cur}" style="background:linear-gradient(135deg,${PALETTE[k].l[0]},${PALETTE[k].l[1]})"></button>`).join("")}</div><span class="swname muted small">${esc(PALETTE[cur].n)}</span></div>`}
 function renderSettings(){
   const p=$("#panel"),shops=settings.shops||[],o=(settings.opening||{})[state.shop]||{};
@@ -1574,10 +1796,11 @@ function renderSettings(){
       <div class="shoplist" id="shopList">${shops.map((s,i)=>shopRowHtml(s,i,shopColor(s.id))).join("")}</div>
       <div class="actions" style="margin-top:10px"><input type="text" id="newShop" placeholder="New shop name" style="flex:1"><button class="btn ghost small" id="addShop">Add</button></div>
       <div class="actions" style="margin-top:12px"><button class="btn" id="saveShops"${canWrite?"":" disabled"}>Save shops</button></div>
-      <p class="muted small">Each shop keeps separate books and its own colour, so you can see at a glance which shop you're in. Match POS works out each day's sale from the POS running total.</p>
+      <p class="muted small">Each shop keeps separate books and its own colour, so you can see at a glance which shop you're in. Match POS works out each day's sale from the POS running total. Untick Sales return to hide the return box (off for Cmore, Pinky and Papillon). Galla float is the change (cash for exchange) kept in the galla every night.</p>
     </div>
     <div class="card"><h2 style="margin-bottom:6px">Opening balances · ${esc((curShop()||{}).name||"")}</h2>
-      <p class="muted small" style="margin-top:0">Count the galla cash and check the UPI / bank balance once. Every entry from this date on is added or taken out to give running balances.</p>
+      <p class="muted small" style="margin-top:0">Count the galla cash and check the UPI / bank balance once. This becomes the Shree Rokad Purant on the date you pick, and every entry from that day on is added or taken out.</p>
+      ${hasOpening(state.shop)?`<div class="check ok" style="margin-bottom:10px">Saved: cash ${rs(o.amount)} · UPI / bank ${rs(o.bank)} as on ${esc(niceDate(o.date))}</div>`:`<div class="check off" style="margin-bottom:10px">No opening balance saved for this shop yet.</div>`}
       <form class="f" id="opForm">
         <label class="fl">As on date<input type="date" id="op_date" value="${esc(o.date||todayStr())}" required></label>
         <div class="row2">${field("op_amt","Cash in galla",o.amount)}${field("op_bank","UPI / bank balance",o.bank)}</div>
@@ -1654,9 +1877,16 @@ function renderSettings(){
   $("#saveShops").onclick=async()=>{
     document.querySelectorAll("#shopList input[type=text]").forEach(i=>{const s=pending[+i.dataset.i];if(s&&i.value.trim())s.name=i.value.trim()});
     document.querySelectorAll("#shopList .poschk").forEach(i=>{const s=pending[+i.dataset.i];if(s)s.pos=i.checked});
+    document.querySelectorAll("#shopList .retchk").forEach(i=>{const s=pending[+i.dataset.i];if(s)s.ret=i.checked});
+    document.querySelectorAll("#shopList .floatin").forEach(i=>{const s=pending[+i.dataset.i];if(s)s.float=i.value===""?2500:num(i.value)});
     await saveSettings({...settings,shops:pending});};
-  $("#opForm").onsubmit=async e=>{e.preventDefault();const opening={...(settings.opening||{})};
-    opening[state.shop]={date:$("#op_date").value,amount:num($("#op_amt").value),bank:num($("#op_bank").value)};await saveSettings({...settings,opening})};
+  $("#opForm").onsubmit=async e=>{e.preventDefault();
+    if(!state.shop){toast("Add a shop first");return}
+    const d=$("#op_date").value;if(!d){toast("Pick the date");return}
+    if(!hasVal($("#op_amt").value)&&!hasVal($("#op_bank").value)){toast("Enter the cash in galla or the UPI / bank balance");return}
+    const opening={...(settings.opening||{})};opening[state.shop]={date:d,amount:num($("#op_amt").value),bank:num($("#op_bank").value)};
+    if(await saveSettings({...settings,opening})){settings={...settings,opening};state.entryDate=d;state.tab="entry";render();toast("Opening saved · Shree Rokad Purant "+rs(opening[state.shop].amount)+" on "+niceDate(d))}
+  };
 }
 
 function confirmInline(wrap,fn){
@@ -1666,8 +1896,8 @@ function confirmInline(wrap,fn){
 }
 
 /* ---------- events ---------- */
-$("#shopSel").onchange=e=>{state.shop=e.target.value;state.pay.editId=null;pform={editId:null,photos:[],vals:{},busy:0};render()};
-document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;if(b.dataset.tab!=="payments"){state.pay.editId=null;state.pay.date=null}render()});
+$("#shopSel").onchange=e=>{state.shop=e.target.value;state.pay.editId=null;state.pay.prefill=null;fform={editId:null};pform={editId:null,photos:[],vals:{},busy:0};render()};
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;if(b.dataset.tab!=="payments"){state.pay.editId=null;state.pay.date=null;state.pay.prefill=null}render()});
 
 let pendingRender=false;
 function liveRender(){

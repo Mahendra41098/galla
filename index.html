@@ -279,6 +279,11 @@ nav.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--acce
 .dn b{font-weight:600}
 .dgrid{display:grid;grid-template-columns:minmax(0,1fr) 90px minmax(0,1fr);gap:6px 10px;align-items:center;font-size:14px}
 .dgrid input{width:100%;text-align:center;font-size:16px}
+.idlebg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:20;padding:16px}
+.idlebox{background:var(--paper);color:var(--ink);border-radius:14px;padding:20px;max-width:360px;width:100%;display:grid;gap:12px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.idlebox h2{margin:0;font-family:var(--display)}
+.idlecount{font-family:var(--mono);font-size:40px;font-weight:600;color:var(--warn)}
+.idlebox .actions{justify-content:center}
 .prefill{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px;display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -328,6 +333,12 @@ window.GALLA_FIREBASE_CONFIG = {
 <datalist id="dl-party"></datalist>
 <datalist id="dl-partyall"></datalist>
 <div class="toast" id="toast" hidden></div>
+<div class="idlebg" id="idleBg" hidden role="alertdialog" aria-modal="true" aria-labelledby="idleTitle" aria-describedby="idleMsg">
+  <div class="idlebox"><h2 id="idleTitle">Still there?</h2>
+    <p id="idleMsg" style="margin:0">For safety, the owner login closes after 10 minutes without use. Keep the session active?</p>
+    <div class="idlecount" id="idleCount" aria-live="polite">60</div>
+    <div class="actions"><button class="btn" type="button" id="idleYes">Yes, keep me logged in</button><button class="btn ghost" type="button" id="idleNo">No, log out</button></div>
+  </div></div>
 <div class="ioshint" id="iosHint" hidden role="dialog" aria-label="Install on iPhone">
   <b>Add Galla to your iPhone</b>
   <span>In Safari, tap the <b style="font-size:inherit">Share</b> button (square with an arrow), then <b style="font-size:inherit">Add to Home Screen</b> → <b style="font-size:inherit">Add</b>.</span>
@@ -354,7 +365,7 @@ try{session=JSON.parse(localStorage.getItem("galla-session")||"null")}catch(e){}
 function me(){return session?(settings.users||[]).find(u=>u.id===session.uid)||null:null}
 function isOwnerU(){const u=me();return !!(u&&u.role==="owner")}
 function myShops(){const all=settings.shops||[];const u=me();if(!u)return [];return u.role==="owner"?all:all.filter(s=>(u.shops||[]).includes(s.id))}
-function setSession(uid){session=uid?{uid}:null;try{uid?localStorage.setItem("galla-session",JSON.stringify(session)):localStorage.removeItem("galla-session")}catch(e){}}
+function setSession(uid){session=uid?{uid}:null;if(uid)try{localStorage.setItem("galla-last-active",String(Date.now()))}catch(e){}try{uid?localStorage.setItem("galla-session",JSON.stringify(session)):localStorage.removeItem("galla-session")}catch(e){}}
 async function hashPin(pin,salt){
   const txt="galla|"+salt+"|"+pin;
   try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(txt));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
@@ -637,8 +648,47 @@ const deleteTxn=x=>write(async()=>{const ref=await ensureBook(state.shop,x.date)
 const saveSettings=next=>write(async()=>{await db.doc("settings/main").set(next)},"Settings saved");
 
 /* ---------- render ---------- */
+/* ---------- Owner auto log out: after 9 min without use ask "Still there?", log out at 10 min if no answer ---------- */
+const IDLE_MS=10*60*1000,WARN_MS=60*1000,IDLE_KEY="galla-last-active";
+let idleTimer=null,idleTick=null,idleShown=false;
+function lastActive(){try{return +localStorage.getItem(IDLE_KEY)||0}catch(e){return 0}}
+function markActive(){try{localStorage.setItem(IDLE_KEY,String(Date.now()))}catch(e){}}
+function doLogout(auto){
+  const u=me();idleHide();clearTimeout(idleTimer);
+  setSession(null);if(u)loginPick=u.id;render();
+  if(auto)toast("Logged out after 10 minutes without use");
+}
+function idleHide(){idleShown=false;clearInterval(idleTick);const bg=$("#idleBg");if(bg)bg.hidden=true}
+function idleShow(){
+  if(idleShown)return;idleShown=true;
+  const bg=$("#idleBg");bg.hidden=false;$("#idleYes").focus();
+  const tick=()=>{const left=Math.ceil((lastActive()+IDLE_MS-Date.now())/1000);
+    if(!isOwnerU()){idleHide();return}
+    if(left<=0){doLogout(true);return}
+    if(Date.now()-lastActive()<IDLE_MS-WARN_MS){idleHide();idleArm();return}   /* answered "Yes" on another tab */
+    $("#idleCount").textContent=left;};
+  tick();idleTick=setInterval(tick,1000);
+}
+function idleCheck(){
+  clearTimeout(idleTimer);
+  if(!session||!isOwnerU()){idleHide();return}
+  const idle=Date.now()-lastActive();
+  if(idle>=IDLE_MS){doLogout(true);return}
+  if(idle>=IDLE_MS-WARN_MS){idleShow();return}
+  idleTimer=setTimeout(idleCheck,IDLE_MS-WARN_MS-idle+50);
+}
+function idleArm(){if(!isOwnerU()){idleHide();clearTimeout(idleTimer);return}if(!lastActive())markActive();if(!idleShown)idleCheck()}
+let lastMark=0;
+function onActivity(){if(idleShown||!session)return;const n=Date.now();if(n-lastMark<5000)return;lastMark=n;markActive();idleCheck()}
+["pointerdown","keydown","touchstart","wheel","scroll"].forEach(ev=>window.addEventListener(ev,onActivity,{passive:true,capture:true}));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)idleCheck()});
+window.addEventListener("focus",idleCheck);
+window.addEventListener("storage",e=>{if(e.key===IDLE_KEY)idleCheck();if(e.key==="galla-session"&&!e.newValue&&session){session=null;idleHide();render()}});
 function render(){
   saveUi();
+  if(!render.idleWired){render.idleWired=true;
+    $("#idleYes").onclick=()=>{markActive();lastMark=Date.now();idleHide();idleCheck();toast("Session active for 10 more minutes")};
+    $("#idleNo").onclick=()=>doLogout(false);}
   const gate=!loaded||!(settings.users||[]).length||!me();
   $("#shopSel").hidden=gate;$("nav.tabs").hidden=gate;$("#who").hidden=gate;
   if(gate){$("#filter").innerHTML="";$("#summary").innerHTML="";
@@ -647,7 +697,8 @@ function render(){
     renderLogin();return}
   const u=me(),owner=isOwnerU();
   $("#who").innerHTML=`<span><b>${esc(u.name)}</b> · ${owner?"Owner":"Shop manager"}</span><button class="link" id="logout">Log out</button>`;
-  $("#logout").onclick=()=>{setSession(null);loginPick=u.id;render()};
+  $("#logout").onclick=()=>doLogout(false);
+  idleArm();
   const allowedTabs=owner?["entry","payments","purchases","funds","accounts","settings"]:["entry","payments","purchases","funds"];
   if(!allowedTabs.includes(state.tab)) state.tab="entry";
   document.querySelectorAll("nav.tabs button").forEach(b=>b.hidden=!allowedTabs.includes(b.dataset.tab));
